@@ -1,0 +1,72 @@
+{
+  "eval_set_id": "v1",
+  "name": "v1",
+  "description": null,
+  "eval_cases": [
+    {
+      "eval_id": "gather_lead_and_news",
+      "conversation": [
+        {
+          "invocation_id": "e-002db6a8-48f4-4f6b-9c41-92300558496b",
+          "user_content": {
+            "parts": [
+              {
+                "video_metadata": null,
+                "thought": null,
+                "inline_data": null,
+                "file_data": null,
+                "thought_signature": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "function_call": null,
+                "function_response": null,
+                "text": "hello"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "video_metadata": null,
+                "thought": null,
+                "inline_data": null,
+                "file_data": null,
+                "thought_signature": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "function_call": null,
+                "function_response": null,
+                "text": "[  \n  {  \n    \"url\": \"https://jamaica-gleaner.com/article/lead-stories/20250729/nia-supports-proposals-increased-transparency-ic-law\",  \n    \"title\": \"NIA supports proposals for increased transparency in IC law\",  \n    \"section\": \"lead-stories\",  \n    \"relevance_score\": 7,  \n    \"reason\": \"Corruption watchdog supports reforms to the Integrity Commission Act, addressing government transparency and accountability.\"  \n  },  \n  {  \n    \"url\": \"https://jamaica-gleaner.com/article/lead-stories/20250728/indecom-boss-vows-stay-relentless-body-cameras\",  \n    \"title\": \"INDECOM boss vows to stay ‘relentless’ on body cameras\",  \n    \"section\": \"lead-stories\",  \n    \"relevance_score\": 5,  \n    \"reason\": \"Call for compulsory body-worn cameras by security forces highlights oversight and accountability issues.\"  \n  },  \n  {  \n    \"url\": \"https://jamaica-gleaner.com/article/lead-stories/20250727/house-search\",  \n    \"title\": \"HOUSE SEARCH\",  \n    \"section\": \"lead-stories\",  \n    \"relevance_score\": 8,  \n    \"reason\": \"Investigation into alleged mismanagement at Gordon House marks a government accountability probe.\"  \n  },  \n  {  \n    \"url\": \"https://jamaica-gleaner.com/article/lead-stories/20250727/growing-frustration-charles-st-thomas-eastern\",  \n    \"title\": \"Growing frustration with Charles in St Thomas Eastern\",  \n    \"section\": \"lead-stories\",  \n    \"relevance_score\": 7,  \n    \"reason\": \"Residents voicing discontent with their MP’s performance reflects political accountability pressures.\"  \n  },  \n  {  \n    \"url\": \"https://jamaica-gleaner.com/article/lead-stories/20250726/golding-vows-make-cabinet-ministers-financials-public\",  \n    \"title\": \"Golding vows to make Cabinet ministers’ financials public\",  \n    \"section\": \"lead-stories\",  \n    \"relevance_score\": 9,  \n    \"reason\": \"Opposition Leader’s pledge to publish ministers’ financial declarations targets greater government transparency.\"  \n  },  \n  {  \n    \"url\": \"https://jamaica-gleaner.com/article/news/20250729/police-constable-suspected-being-involved-firearms-trafficking-arrested\",  \n    \"title\": \"Police constable suspected of being involved in firearms trafficking arrested\",  \n    \"section\": \"news\",  \n    \"relevance_score\": 8,  \n    \"reason\": \"Allegation of a serving officer trafficking illegal firearms underscores security-force accountability.\"  \n  },  \n  {  \n    \"url\": \"https://jamaica-gleaner.com/article/news/20250729/vaz-says-every-effort-should-be-made-not-to-politicise-school-bus-tour\",  \n    \"title\": \"Vaz says 'every effort should be made not to politicise' school bus tour\",  \n    \"section\": \"news\",  \n    \"relevance_score\": 6,  \n    \"reason\": \"Transport Minister’s warning against politicisation of a public program highlights governance concerns.\"  \n  }  \n]"
+              }
+            ],
+            "role": null
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": "call_vwqHxO4bFH3pBNJBdXu9WgH3",
+                "args": {},
+                "name": "get_gleaner_lead_stories"
+              },
+              {
+                "id": "call_ObEdsps4pVnjg0Wb8eEbds0v",
+                "args": {},
+                "name": "get_gleaner_news_section"
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 1753833792.646005
+        }
+      ],
+      "session_input": {
+        "app_name": "gleaner_researcher_agent",
+        "user_id": "user",
+        "state": {}
+      },
+      "creation_timestamp": 1753834164.694775
+    }
+  ],
+  "creation_timestamp": 1753834137.632234
+}
