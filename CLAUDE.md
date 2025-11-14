@@ -15,6 +15,11 @@ This is a Python backend project called "jaacountable-backend" that implements a
   - `agent.py` - Defines the `news_gatherer_agent` using Google ADK's LlmAgent with LiteLLM model (o4-mini)
   - `tools.py` - Web scraping tools for Jamaica Gleaner sections (lead stories and news)
   - `v1.evalset.json` - Evaluation dataset for testing agent performance
+- **Database Layer**: PostgreSQL-based persistence layer
+  - `config/database.py` - asyncpg connection pool manager
+  - `alembic/` - Database migration system with manual SQL DDL
+  - `alembic/versions/` - Migration files with raw SQL
+  - `scripts/` - Helper scripts for database operations
 
 ### Agent Architecture
 
@@ -26,10 +31,21 @@ The system uses a single specialized agent (`news_gatherer_agent`) that:
 
 ### Dependencies
 
+**Agent System:**
 - `google-adk>=1.8.0` - Google Agent Development Kit for LLM agent framework
 - `litellm>=1.74.3` - LLM abstraction layer, configured to use o4-mini model
 - `requests` - HTTP library for web scraping
+
+**Database Layer:**
+- `alembic>=1.17.1` - Database migration management
+- `asyncpg>=0.30.0` - Async PostgreSQL driver
+- `aiosql>=13.4` - SQL query management with raw SQL
+- `greenlet>=3.2.3` - Required for SQLAlchemy async operations
+- `pydantic>=2.11.7` - Data validation and serialization
+
+**Environment:**
 - Python 3.12+ required
+- Docker & Docker Compose for local PostgreSQL database
 
 ## Development Commands
 
@@ -42,6 +58,44 @@ adk web
 
 This suggests the project is designed to work with Google ADK's web interface.
 
+### Database Management
+
+**Helper Scripts** (all located in `scripts/`):
+- `./scripts/start-db.sh` - Start PostgreSQL Docker container and wait for health check
+- `./scripts/migrate.sh` - Run Alembic migrations to latest version
+- `./scripts/create-migration.sh "message"` - Create new migration file with manual SQL DDL
+
+**Common Operations:**
+```bash
+# Start database
+./scripts/start-db.sh
+
+# Run migrations
+./scripts/migrate.sh
+
+# Create new migration
+./scripts/create-migration.sh "add classifications table"
+
+# Connect to database
+docker exec -it postgres psql -U user -d jaacountable_db
+
+# View logs
+docker-compose logs postgres
+
+# Stop database
+docker-compose down
+
+# Stop and remove data (DESTRUCTIVE)
+docker-compose down -v
+```
+
+**Database Credentials** (local development):
+- User: `user`
+- Password: `password`
+- Database: `jaacountable_db`
+- Port: `5432`
+- Connection string: `postgresql+asyncpg://user:password@localhost:5432/jaacountable_db`
+
 ### Package Management
 
 The project uses `uv` for dependency management:
@@ -53,6 +107,20 @@ The project uses `uv` for dependency management:
 The project includes an evaluation set (`v1.evalset.json`) for testing agent performance, though no standard test runner configuration was found.
 
 ## Important Implementation Details
+
+### Database Architecture
+- **Raw SQL Approach**: Uses manual SQL DDL in Alembic migrations, NOT SQLAlchemy ORM models
+- **Async Operations**: All database operations use asyncpg for async/await patterns
+- **Connection Pooling**: `config/database.py` manages connection pools with proper lifecycle
+- **Query Management**: Future queries will use aiosql with SQL stored in `.sql` files
+- **Migration Strategy**: All migrations include both `upgrade()` and `downgrade()` functions
+- **Environment Config**: Database URL loaded from `.env` file, managed by Alembic
+
+**Current Schema:**
+- `articles` table: Stores scraped articles with deduplication via unique URL constraint
+  - Indexes on `url` and `published_date` for performance
+  - `fetched_at` tracks when article was scraped
+  - `full_text` stores complete article content for classification
 
 ### Web Scraping Ethics
 - The scraping tools implement a 10-second crawl delay to respect the target website
@@ -70,3 +138,4 @@ The project includes an evaluation set (`v1.evalset.json`) for testing agent per
 2. Tools fetch HTML content with crawl delays
 3. Agent processes content using LLM to identify relevant articles
 4. Returns structured JSON with article metadata and relevance scores
+5. (Future) Articles stored in PostgreSQL via asyncpg for persistence and deduplication
