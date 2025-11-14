@@ -9,6 +9,7 @@ dependencies = [
     "alembic>=1.17.1",
     "asyncpg>=0.30.0",
     "google-adk[eval]==1.12.0",
+    "greenlet>=3.2.3",
     "litellm>=1.74.3",
     "pandas>=2.3.1",
     "pydantic>=2.11.7",
