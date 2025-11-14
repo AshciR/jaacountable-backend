@@ -5,9 +5,13 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "aiosql>=13.4",
+    "alembic>=1.17.1",
+    "asyncpg>=0.30.0",
     "google-adk[eval]==1.12.0",
     "litellm>=1.74.3",
     "pandas>=2.3.1",
+    "pydantic>=2.11.7",
     "pytest>=8.4.1",
     "pytest-asyncio>=1.1.0",
 ]
