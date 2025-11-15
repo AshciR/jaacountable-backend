@@ -1,6 +1,7 @@
 """Database configuration and connection pool management."""
 import asyncio
 import os
+from contextlib import asynccontextmanager
 from typing import Optional
 import asyncpg
 
@@ -15,6 +16,37 @@ class DatabaseConfig:
         )
         self._pool: Optional[asyncpg.Pool] = None
         self._pool_lock = asyncio.Lock()
+
+    async def __aenter__(self):
+        """Allow using DatabaseConfig as an async context manager."""
+        await self.create_pool()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Ensure pool is closed when exiting context."""
+        await self.close_pool()
+
+    @asynccontextmanager
+    async def connection(self):
+        """
+        Get a connection as an async context manager.
+        Automatically releases the connection when done.
+
+        Usage:
+            async with db_config.connection() as conn:
+                result = await conn.fetch("SELECT * FROM users")
+
+        Yields:
+            asyncpg.Connection: Database connection from the pool
+
+        Raises:
+            RuntimeError: If connection pool is not initialized
+        """
+        conn = await self.get_connection()
+        try:
+            yield conn
+        finally:
+            await self.release_connection(conn)
 
     def get_asyncpg_url(self) -> str:
         """
@@ -85,14 +117,33 @@ class DatabaseConfig:
         if self._pool is not None:
             await self._pool.release(conn)
 
-    async def __aenter__(self):
-        """Allow using DatabaseConfig as an async context manager."""
-        await self.create_pool()
-        return self
+    def get_pool_stats(self) -> dict[str, int]:
+        """
+        Get current connection pool statistics.
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Ensure pool is closed when exiting context."""
-        await self.close_pool()
+        Returns:
+            dict with pool statistics:
+                - size: Current number of connections in pool
+                - idle: Number of idle (free) connections
+                - acquired: Number of currently acquired connections
+                - min_size: Minimum pool size
+                - max_size: Maximum pool size
+
+        Raises:
+            RuntimeError: If pool hasn't been created yet
+        """
+        if self._pool is None:
+            raise RuntimeError(
+                "Connection pool not initialized. Call create_pool() first."
+            )
+
+        return {
+            "size": self._pool.get_size(),
+            "idle": self._pool.get_idle_size(),
+            "acquired": self._pool.get_size() - self._pool.get_idle_size(),
+            "min_size": self._pool.get_min_size(),
+            "max_size": self._pool.get_max_size(),
+        }
 
 
 # Global database configuration instance
