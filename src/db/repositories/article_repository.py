@@ -4,6 +4,8 @@ from datetime import datetime
 from pathlib import Path
 import asyncpg
 
+from src.db.models.domain import Article
+
 
 class ArticleRepository:
     """Repository for article database operations using aiosql."""
@@ -17,42 +19,42 @@ class ArticleRepository:
     async def insert_article(
         self,
         conn: asyncpg.Connection,
-        url: str,
-        title: str,
-        section: str,
-        published_date: datetime | None = None,
-        fetched_at: datetime | None = None,
-        full_text: str | None = None
-    ) -> asyncpg.Record:
+        article: Article,
+    ) -> Article:
         """
         Insert a new article into the database.
 
         Args:
             conn: Database connection to use for the query
-            url: Article URL (must be unique)
-            title: Article title
-            section: Article section (e.g., "lead-stories", "news")
-            published_date: When the article was published (optional)
-            fetched_at: When the article was scraped (defaults to now)
-            full_text: Full article content (optional)
+            article: Article model with validated data
 
         Returns:
-            asyncpg.Record: The inserted article record with id, url, title,
-                           section, published_date, and fetched_at
+            Article: The inserted article with database-generated id
 
         Raises:
             asyncpg.UniqueViolationError: If article URL already exists
+            ValueError: If article data fails validation
         """
-        if fetched_at is None:
-            fetched_at = datetime.now()
-
+        # Article model handles validation and provides fetched_at default
         result = await self.queries.insert_article(
             conn,
-            url=url,
-            title=title,
-            section=section,
-            published_date=published_date,
-            fetched_at=fetched_at,
-            full_text=full_text
+            url=article.url,
+            title=article.title,
+            section=article.section,
+            published_date=article.published_date,
+            fetched_at=article.fetched_at,
+            full_text=article.full_text,
         )
-        return result
+
+        # Convert asyncpg.Record to Article model
+        # Note: SQL query doesn't return full_text for performance,
+        # so we use the original article's full_text value
+        return Article(
+            id=result['id'],
+            url=result['url'],
+            title=result['title'],
+            section=result['section'],
+            published_date=result['published_date'],
+            fetched_at=result['fetched_at'],
+            full_text=article.full_text,
+        )
