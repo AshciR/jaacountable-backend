@@ -104,7 +104,35 @@ The project uses `uv` for dependency management:
 
 ### Testing
 
-The project includes an evaluation set (`v1.evalset.json`) for testing agent performance, though no standard test runner configuration was found.
+The project uses pytest with testcontainers for isolated database testing.
+
+**Run tests:**
+```bash
+# Run all tests
+uv run pytest tests/
+
+# Run with verbose output
+uv run pytest tests/ -v
+
+# Run with logging (shows database connection details)
+uv run pytest tests/ -v --log-cli-level=INFO
+```
+
+**Test Infrastructure:**
+- `tests/conftest.py` - Pytest fixtures for database testing
+- `testcontainers` - Spins up isolated PostgreSQL containers per test session
+- Automatic Alembic migrations on test database
+- Transaction rollback after each test for isolation
+- BDD-style test format (Given/When/Then comments)
+
+**Available Fixtures:**
+- `postgres_container` - Session-scoped PostgreSQL container
+- `test_database_url` - Connection URL from container
+- `run_migrations` - Runs Alembic migrations on test database
+- `db_pool` - asyncpg connection pool
+- `db_connection` - Connection with automatic transaction rollback
+
+The project also includes an evaluation set (`v1.evalset.json`) for testing agent performance.
 
 ## Important Implementation Details
 

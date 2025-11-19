@@ -224,6 +224,32 @@ The project uses:
 - **aiosql**: SQL query management with raw SQL in `.sql` files
 - **Docker**: Containerized PostgreSQL for local development
 - **Ethical Web Scraping**: 10-second delays between requests to respect the target website
+- **Testcontainers**: Isolated PostgreSQL containers for integration testing
+
+### Running Tests
+
+The project uses pytest with testcontainers for isolated database testing. Each test session spins up a fresh PostgreSQL container and runs migrations automatically.
+
+**Run all tests:**
+```bash
+uv run pytest tests/
+```
+
+**Run tests with verbose output:**
+```bash
+uv run pytest tests/ -v
+```
+
+**Run tests with logging (shows database connection details):**
+```bash
+uv run pytest tests/ -v --log-cli-level=INFO
+```
+
+**Test Features:**
+- Automatic PostgreSQL container lifecycle management
+- Alembic migrations run automatically on test database
+- Transaction rollback after each test for isolation
+- BDD-style test format (Given/When/Then)
 
 ### Database Development Workflow
 
