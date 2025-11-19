@@ -9,8 +9,8 @@ import asyncpg
 class DatabaseConfig:
     """Database configuration and connection pool manager."""
 
-    def __init__(self):
-        self.database_url: str = os.getenv(
+    def __init__(self, database_url: str | None = None):
+        self.database_url: str = database_url or os.getenv(
             "DATABASE_URL",
             "postgresql+asyncpg://user:password@localhost:5432/jaacountable_db"
         )
