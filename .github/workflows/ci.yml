@@ -26,4 +26,4 @@ jobs:
       - name: Install dependencies
         run: uv sync
       - name: Run tests
-        run: uv run pytest tests/ -v --log-cli-level=INFO
+        run: uv run pytest tests/ -v --log-cli-level=INFO -n auto --dist loadfile

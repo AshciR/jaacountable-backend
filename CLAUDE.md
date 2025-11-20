@@ -116,6 +116,12 @@ uv run pytest tests/ -v
 
 # Run with logging (shows database connection details)
 uv run pytest tests/ -v --log-cli-level=INFO
+
+# Run a specific test class
+uv run pytest tests/db/repositories/test_article_repository.py::TestInsertArticleHappyPath -v
+
+# Run tests in parallel across files (uses pytest-xdist)
+uv run pytest tests/ -n auto --dist loadfile
 ```
 
 **Test Infrastructure:**
@@ -124,6 +130,8 @@ uv run pytest tests/ -v --log-cli-level=INFO
 - Automatic Alembic migrations on test database
 - Transaction rollback after each test for isolation
 - BDD-style test format (Given/When/Then comments)
+- Tests organized into classes by category (e.g., `TestInsertArticleHappyPath`, `TestInsertArticleValidationErrors`)
+- pytest-xdist for parallel test execution across test files
 
 **Available Fixtures:**
 - `postgres_container` - Session-scoped PostgreSQL container
@@ -131,6 +139,9 @@ uv run pytest tests/ -v --log-cli-level=INFO
 - `run_migrations` - Runs Alembic migrations on test database
 - `db_pool` - asyncpg connection pool
 - `db_connection` - Connection with automatic transaction rollback
+
+**Note on Parallel Testing:**
+pytest-xdist is configured for parallel execution across test files (`--dist loadfile`). Tests within a single file run sequentially due to session-scoped async database fixtures and event loop constraints with pytest-asyncio.
 
 The project also includes an evaluation set (`v1.evalset.json`) for testing agent performance.
 
