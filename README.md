@@ -245,11 +245,29 @@ uv run pytest tests/ -v
 uv run pytest tests/ -v --log-cli-level=INFO
 ```
 
+**Run a specific test class:**
+```bash
+uv run pytest tests/db/repositories/test_article_repository.py::TestInsertArticleHappyPath -v
+```
+
 **Test Features:**
 - Automatic PostgreSQL container lifecycle management
 - Alembic migrations run automatically on test database
 - Transaction rollback after each test for isolation
-- BDD-style test format (Given/When/Then)
+- BDD-style test format (Given/When/Then comments)
+- Tests organized into classes by category (HappyPath, ValidationErrors, DatabaseConstraints, EdgeCases)
+- pytest-xdist available for parallel test execution across multiple test files
+
+**Parallel Test Execution:**
+
+The project includes pytest-xdist for running tests in parallel. Due to session-scoped async database fixtures, parallel execution works best across different test files:
+
+```bash
+# Run test files in parallel (each file runs in its own worker)
+uv run pytest tests/ -n auto --dist loadfile
+```
+
+Note: Tests within a single file that use database fixtures run sequentially to maintain event loop compatibility.
 
 ### Database Development Workflow
 

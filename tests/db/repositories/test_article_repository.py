@@ -1,32 +1,381 @@
 """Tests for ArticleRepository."""
 
 import asyncpg
-from datetime import datetime
+import pytest
+from datetime import datetime, timedelta
 
 from src.db.repositories.article_repository import ArticleRepository
 from src.db.models.domain import Article
 
 
-async def test_insert_article_success(
-    db_connection: asyncpg.Connection,
-):
-    # Given: a valid article and repository
-    article = Article(
-        url="https://example.com/test-article",
-        title="Test Article",
-        section="news",
-        published_date=datetime(2025, 11, 15),
-        full_text="Article content here",
-    )
-    repository = ArticleRepository()
+class TestInsertArticleHappyPath:
+    """Happy path tests for insert_article."""
 
-    # When: the article is inserted
-    result = await repository.insert_article(db_connection, article)
+    async def test_insert_article_success(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: a valid article with all fields populated
+        article = Article(
+            url="https://example.com/test-article",
+            title="Test Article",
+            section="news",
+            published_date=datetime(2025, 11, 15),
+            full_text="Article content here",
+        )
+        repository = ArticleRepository()
 
-    # Then: the returned article has a database-generated id and matching fields
-    assert result.id is not None
-    assert result.url == article.url
-    assert result.title == article.title
-    assert result.section == article.section
-    assert result.published_date == article.published_date
-    assert result.full_text == article.full_text
+        # When: the article is inserted
+        result = await repository.insert_article(db_connection, article)
+
+        # Then: the returned article has a database-generated id and matching fields
+        assert result.id is not None
+        assert result.url == article.url
+        assert result.title == article.title
+        assert result.section == article.section
+        assert result.published_date == article.published_date
+        assert result.full_text == article.full_text
+
+    async def test_insert_article_with_minimal_fields(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with only required fields (url, title, section)
+        article = Article(
+            url="https://example.com/minimal-article",
+            title="Minimal Article",
+            section="lead-stories",
+        )
+        repository = ArticleRepository()
+
+        # When: the article is inserted
+        result = await repository.insert_article(db_connection, article)
+
+        # Then: returns article with id, defaults applied, optional fields are None
+        assert result.id is not None
+        assert result.url == article.url
+        assert result.title == article.title
+        assert result.section == article.section
+        assert result.published_date is None
+        assert result.full_text is None
+        assert result.fetched_at is not None
+
+
+    async def test_insert_article_preserves_full_text_in_return(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with full_text content
+        full_text_content = "This is the complete article text that should be preserved."
+        article = Article(
+            url="https://example.com/preserve-full-text",
+            title="Full Text Preservation Test",
+            section="news",
+            full_text=full_text_content,
+        )
+        repository = ArticleRepository()
+
+        # When: the article is inserted
+        result = await repository.insert_article(db_connection, article)
+
+        # Then: returns article includes the original full_text
+        # (verifies repository preserves it since SQL doesn't return it)
+        assert result.full_text == full_text_content
+
+    async def test_insert_article_with_http_url(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with http:// URL (not https)
+        article = Article(
+            url="http://example.com/http-article",
+            title="HTTP URL Article",
+            section="news",
+        )
+        repository = ArticleRepository()
+
+        # When: the article is inserted
+        result = await repository.insert_article(db_connection, article)
+
+        # Then: returns article successfully (validates http:// is accepted)
+        assert result.id is not None
+        assert result.url == "http://example.com/http-article"
+
+    async def test_insert_article_strips_whitespace(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with whitespace-padded fields
+        article = Article(
+            url="  https://example.com/whitespace-test  ",
+            title="  Whitespace Title  ",
+            section="  news  ",
+        )
+        repository = ArticleRepository()
+
+        # When: the article is inserted
+        result = await repository.insert_article(db_connection, article)
+
+        # Then: returns article with trimmed fields (Pydantic validation)
+        assert result.id is not None
+        assert result.url == "https://example.com/whitespace-test"
+        assert result.title == "Whitespace Title"
+        assert result.section == "news"
+
+    async def test_insert_multiple_articles_sequential(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: multiple valid articles with different URLs
+        repository = ArticleRepository()
+        articles = [
+            Article(
+                url=f"https://example.com/article-{i}",
+                title=f"Article {i}",
+                section="news",
+            )
+            for i in range(3)
+        ]
+
+        # When: each article is inserted sequentially
+        results = []
+        for article in articles:
+            result = await repository.insert_article(db_connection, article)
+            results.append(result)
+
+        # Then: each gets unique auto-incrementing id
+        ids = [r.id for r in results]
+        assert len(set(ids)) == 3  # All IDs are unique
+        assert all(id is not None for id in ids)
+
+
+class TestInsertArticleValidationErrors:
+    """Validation error tests for insert_article."""
+
+    async def test_empty_url_raises_value_error(self):
+        # Given: an article with empty string URL
+        # When: Article creation is attempted
+        # Then: raises ValueError with message about URL
+        with pytest.raises(ValueError, match="URL cannot be empty"):
+            Article(
+                url="",
+                title="Test Article",
+                section="news",
+            )
+
+    async def test_whitespace_only_url_raises_value_error(self):
+        # Given: an article with whitespace-only URL
+        # When: Article creation is attempted
+        # Then: raises ValueError
+        with pytest.raises(ValueError, match="URL cannot be empty"):
+            Article(
+                url="   ",
+                title="Test Article",
+                section="news",
+            )
+
+    async def test_url_without_protocol_raises_value_error(self):
+        # Given: an article with URL missing http:// or https://
+        # When: Article creation is attempted
+        # Then: raises ValueError with message about URL protocol
+        with pytest.raises(ValueError, match="URL must start with http:// or https://"):
+            Article(
+                url="example.com/article",
+                title="Test Article",
+                section="news",
+            )
+
+
+    async def test_empty_title_raises_value_error(self):
+        # Given: an article with empty title
+        # When: Article creation is attempted
+        # Then: raises ValueError
+        with pytest.raises(ValueError, match="Field cannot be empty"):
+            Article(
+                url="https://example.com/article",
+                title="",
+                section="news",
+            )
+
+    async def test_whitespace_only_title_raises_value_error(self):
+        # Given: an article with whitespace-only title
+        # When: Article creation is attempted
+        # Then: raises ValueError
+        with pytest.raises(ValueError, match="Field cannot be empty"):
+            Article(
+                url="https://example.com/article",
+                title="   ",
+                section="news",
+            )
+
+    async def test_empty_section_raises_value_error(self):
+        # Given: an article with empty section
+        # When: Article creation is attempted
+        # Then: raises ValueError
+        with pytest.raises(ValueError, match="Field cannot be empty"):
+            Article(
+                url="https://example.com/article",
+                title="Test Article",
+                section="",
+            )
+
+
+class TestInsertArticleDatabaseConstraints:
+    """Database constraint tests for insert_article."""
+
+    async def test_duplicate_url_raises_unique_violation(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article already exists with a specific URL
+        repository = ArticleRepository()
+        first_article = Article(
+            url="https://example.com/duplicate-test",
+            title="First Article",
+            section="news",
+        )
+        await repository.insert_article(db_connection, first_article)
+
+        # When: another article with the same URL is inserted
+        second_article = Article(
+            url="https://example.com/duplicate-test",
+            title="Second Article",
+            section="lead-stories",
+        )
+
+        # Then: raises asyncpg.UniqueViolationError
+        with pytest.raises(asyncpg.UniqueViolationError):
+            await repository.insert_article(db_connection, second_article)
+
+    async def test_same_url_different_section_fails(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article exists with URL X
+        repository = ArticleRepository()
+        first_article = Article(
+            url="https://example.com/url-unique-test",
+            title="News Article",
+            section="news",
+        )
+        await repository.insert_article(db_connection, first_article)
+
+        # When: another article with same URL X but different section is inserted
+        second_article = Article(
+            url="https://example.com/url-unique-test",
+            title="Lead Story Article",
+            section="lead-stories",
+        )
+
+        # Then: raises UniqueViolationError (URL uniqueness is global, not per-section)
+        with pytest.raises(asyncpg.UniqueViolationError):
+            await repository.insert_article(db_connection, second_article)
+
+
+class TestInsertArticleEdgeCases:
+    """Edge case tests for insert_article."""
+
+    async def test_with_special_characters_in_url(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with URL containing query params, fragments, encoded characters
+        special_url = "https://example.com/article?param=value&other=123#section-1"
+        article = Article(
+            url=special_url,
+            title="Special URL Article",
+            section="news",
+        )
+        repository = ArticleRepository()
+
+        # When: the article is inserted
+        result = await repository.insert_article(db_connection, article)
+
+        # Then: returns article with URL preserved correctly
+        assert result.id is not None
+        assert result.url == special_url
+
+    async def test_with_unicode_title(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with Unicode characters in title (accents, special chars)
+        unicode_title = "Café Culture: Jamaica's Growing Artisanal Scene — 日本語テスト"
+        article = Article(
+            url="https://example.com/unicode-title",
+            title=unicode_title,
+            section="news",
+        )
+        repository = ArticleRepository()
+
+        # When: the article is inserted
+        result = await repository.insert_article(db_connection, article)
+
+        # Then: returns article with Unicode title preserved
+        assert result.id is not None
+        assert result.title == unicode_title
+
+    async def test_with_very_long_full_text(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with very long full_text (100KB of text)
+        long_text = "This is a test paragraph. " * 5000  # ~130KB
+        article = Article(
+            url="https://example.com/long-full-text",
+            title="Long Content Article",
+            section="news",
+            full_text=long_text,
+        )
+        repository = ArticleRepository()
+
+        # When: the article is inserted
+        result = await repository.insert_article(db_connection, article)
+
+        # Then: successfully inserts (TEXT type handles large content)
+        assert result.id is not None
+        assert result.full_text == long_text
+
+    async def test_fetched_at_defaults_to_current_time(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article without explicit fetched_at
+        before_insert = datetime.now()
+        article = Article(
+            url="https://example.com/default-fetched-at",
+            title="Default Fetched At Article",
+            section="news",
+        )
+        repository = ArticleRepository()
+
+        # When: the article is inserted
+        result = await repository.insert_article(db_connection, article)
+        after_insert = datetime.now()
+
+        # Then: returns article with fetched_at close to current time
+        assert result.id is not None
+        assert result.fetched_at is not None
+        # Allow 1 second tolerance for test execution time
+        assert before_insert - timedelta(seconds=1) <= result.fetched_at <= after_insert + timedelta(seconds=1)
+
+    async def test_with_custom_fetched_at(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with explicit fetched_at value
+        custom_fetched_at = datetime(2025, 1, 1, 12, 0, 0)
+        article = Article(
+            url="https://example.com/custom-fetched-at",
+            title="Custom Fetched At Article",
+            section="news",
+            fetched_at=custom_fetched_at,
+        )
+        repository = ArticleRepository()
+
+        # When: the article is inserted
+        result = await repository.insert_article(db_connection, article)
+
+        # Then: returns article with the custom fetched_at preserved
+        assert result.id is not None
+        assert result.fetched_at == custom_fetched_at
