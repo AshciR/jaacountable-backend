@@ -147,8 +147,8 @@ The current schema includes:
   - `url` (VARCHAR UNIQUE NOT NULL) - Article URL for deduplication
   - `title` (VARCHAR NOT NULL)
   - `section` (VARCHAR NOT NULL) - e.g., "lead-stories", "news"
-  - `published_date` (TIMESTAMP)
-  - `fetched_at` (TIMESTAMP NOT NULL DEFAULT NOW())
+  - `published_date` (TIMESTAMPTZ)
+  - `fetched_at` (TIMESTAMPTZ NOT NULL DEFAULT NOW())
   - `full_text` (TEXT) - Full article content for classification
   - Indexes on `url` and `published_date`
 

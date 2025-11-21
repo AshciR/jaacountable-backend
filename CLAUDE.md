@@ -154,11 +154,13 @@ The project also includes an evaluation set (`v1.evalset.json`) for testing agen
 - **Query Management**: Future queries will use aiosql with SQL stored in `.sql` files
 - **Migration Strategy**: All migrations include both `upgrade()` and `downgrade()` functions
 - **Environment Config**: Database URL loaded from `.env` file, managed by Alembic
+- **UTC Timestamps**: All timestamp columns use `TIMESTAMPTZ` and Python code uses `datetime.now(timezone.utc)` for timezone-aware UTC datetimes
 
 **Current Schema:**
 - `articles` table: Stores scraped articles with deduplication via unique URL constraint
   - Indexes on `url` and `published_date` for performance
-  - `fetched_at` tracks when article was scraped
+  - `fetched_at` (TIMESTAMPTZ) tracks when article was scraped
+  - `published_date` (TIMESTAMPTZ) stores article publication date
   - `full_text` stores complete article content for classification
 
 ### Web Scraping Ethics

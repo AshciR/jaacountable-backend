@@ -2,7 +2,7 @@
 
 import asyncpg
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from src.db.repositories.article_repository import ArticleRepository
 from src.db.models.domain import Article
@@ -20,7 +20,7 @@ class TestInsertArticleHappyPath:
             url="https://example.com/test-article",
             title="Test Article",
             section="news",
-            published_date=datetime(2025, 11, 15),
+            published_date=datetime(2025, 11, 15, tzinfo=timezone.utc),
             full_text="Article content here",
         )
         repository = ArticleRepository()
@@ -341,7 +341,7 @@ class TestInsertArticleEdgeCases:
         db_connection: asyncpg.Connection,
     ):
         # Given: an article without explicit fetched_at
-        before_insert = datetime.now()
+        before_insert = datetime.now(timezone.utc)
         article = Article(
             url="https://example.com/default-fetched-at",
             title="Default Fetched At Article",
@@ -351,7 +351,7 @@ class TestInsertArticleEdgeCases:
 
         # When: the article is inserted
         result = await repository.insert_article(db_connection, article)
-        after_insert = datetime.now()
+        after_insert = datetime.now(timezone.utc)
 
         # Then: returns article with fetched_at close to current time
         assert result.id is not None
@@ -364,7 +364,7 @@ class TestInsertArticleEdgeCases:
         db_connection: asyncpg.Connection,
     ):
         # Given: an article with explicit fetched_at value
-        custom_fetched_at = datetime(2025, 1, 1, 12, 0, 0)
+        custom_fetched_at = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         article = Article(
             url="https://example.com/custom-fetched-at",
             title="Custom Fetched At Article",
