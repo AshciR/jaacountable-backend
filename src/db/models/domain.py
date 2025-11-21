@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
@@ -13,7 +13,7 @@ class Article(BaseModel):
     title: str
     section: str
     published_date: datetime | None = None
-    fetched_at: datetime = Field(default_factory=datetime.now)
+    fetched_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     full_text: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
