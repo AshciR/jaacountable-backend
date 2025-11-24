@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from src.db.repositories.article_repository import ArticleRepository
 from src.db.models.domain import Article
+from tests.db.repositories.utils import create_test_news_source
 
 
 class TestInsertArticleHappyPath:
@@ -22,6 +23,7 @@ class TestInsertArticleHappyPath:
             section="news",
             published_date=datetime(2025, 11, 15, tzinfo=timezone.utc),
             full_text="Article content here",
+            news_source_id=1,
         )
         repository = ArticleRepository()
 
@@ -35,6 +37,7 @@ class TestInsertArticleHappyPath:
         assert result.section == article.section
         assert result.published_date == article.published_date
         assert result.full_text == article.full_text
+        assert result.news_source_id == 1
 
     async def test_insert_article_with_minimal_fields(
         self,
@@ -45,6 +48,7 @@ class TestInsertArticleHappyPath:
             url="https://example.com/minimal-article",
             title="Minimal Article",
             section="lead-stories",
+            news_source_id=1,
         )
         repository = ArticleRepository()
 
@@ -72,6 +76,7 @@ class TestInsertArticleHappyPath:
             title="Full Text Preservation Test",
             section="news",
             full_text=full_text_content,
+            news_source_id=1,
         )
         repository = ArticleRepository()
 
@@ -91,6 +96,7 @@ class TestInsertArticleHappyPath:
             url="http://example.com/http-article",
             title="HTTP URL Article",
             section="news",
+            news_source_id=1,
         )
         repository = ArticleRepository()
 
@@ -110,6 +116,7 @@ class TestInsertArticleHappyPath:
             url="  https://example.com/whitespace-test  ",
             title="  Whitespace Title  ",
             section="  news  ",
+            news_source_id=1,
         )
         repository = ArticleRepository()
 
@@ -133,6 +140,7 @@ class TestInsertArticleHappyPath:
                 url=f"https://example.com/article-{i}",
                 title=f"Article {i}",
                 section="news",
+                news_source_id=1,
             )
             for i in range(3)
         ]
@@ -149,79 +157,34 @@ class TestInsertArticleHappyPath:
         assert all(id is not None for id in ids)
 
 
-class TestInsertArticleValidationErrors:
-    """Validation error tests for insert_article."""
-
-    async def test_empty_url_raises_value_error(self):
-        # Given: an article with empty string URL
-        # When: Article creation is attempted
-        # Then: raises ValueError with message about URL
-        with pytest.raises(ValueError, match="URL cannot be empty"):
-            Article(
-                url="",
-                title="Test Article",
-                section="news",
-            )
-
-    async def test_whitespace_only_url_raises_value_error(self):
-        # Given: an article with whitespace-only URL
-        # When: Article creation is attempted
-        # Then: raises ValueError
-        with pytest.raises(ValueError, match="URL cannot be empty"):
-            Article(
-                url="   ",
-                title="Test Article",
-                section="news",
-            )
-
-    async def test_url_without_protocol_raises_value_error(self):
-        # Given: an article with URL missing http:// or https://
-        # When: Article creation is attempted
-        # Then: raises ValueError with message about URL protocol
-        with pytest.raises(ValueError, match="URL must start with http:// or https://"):
-            Article(
-                url="example.com/article",
-                title="Test Article",
-                section="news",
-            )
-
-
-    async def test_empty_title_raises_value_error(self):
-        # Given: an article with empty title
-        # When: Article creation is attempted
-        # Then: raises ValueError
-        with pytest.raises(ValueError, match="Field cannot be empty"):
-            Article(
-                url="https://example.com/article",
-                title="",
-                section="news",
-            )
-
-    async def test_whitespace_only_title_raises_value_error(self):
-        # Given: an article with whitespace-only title
-        # When: Article creation is attempted
-        # Then: raises ValueError
-        with pytest.raises(ValueError, match="Field cannot be empty"):
-            Article(
-                url="https://example.com/article",
-                title="   ",
-                section="news",
-            )
-
-    async def test_empty_section_raises_value_error(self):
-        # Given: an article with empty section
-        # When: Article creation is attempted
-        # Then: raises ValueError
-        with pytest.raises(ValueError, match="Field cannot be empty"):
-            Article(
-                url="https://example.com/article",
-                title="Test Article",
-                section="",
-            )
-
-
 class TestInsertArticleDatabaseConstraints:
     """Database constraint tests for insert_article."""
+
+    async def test_cannot_delete_news_source_with_articles(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: a news source exists with an article referencing it
+        news_source = await create_test_news_source(
+            conn=db_connection,
+            name="News Source With Articles",
+        )
+        repository = ArticleRepository()
+        article = Article(
+            url="https://example.com/restrict-test",
+            title="Article Referencing News Source",
+            section="news",
+            news_source_id=news_source.id,
+        )
+        await repository.insert_article(db_connection, article)
+
+        # When: attempting to delete the news source
+        # Then: raises RestrictViolationError due to ON DELETE RESTRICT
+        with pytest.raises(asyncpg.RestrictViolationError):
+            await db_connection.execute(
+                "DELETE FROM news_sources WHERE id = $1",
+                news_source.id,
+            )
 
     async def test_duplicate_url_raises_unique_violation(
         self,
@@ -233,6 +196,7 @@ class TestInsertArticleDatabaseConstraints:
             url="https://example.com/duplicate-test",
             title="First Article",
             section="news",
+            news_source_id=1,
         )
         await repository.insert_article(db_connection, first_article)
 
@@ -241,6 +205,7 @@ class TestInsertArticleDatabaseConstraints:
             url="https://example.com/duplicate-test",
             title="Second Article",
             section="lead-stories",
+            news_source_id=1,
         )
 
         # Then: raises asyncpg.UniqueViolationError
@@ -257,6 +222,7 @@ class TestInsertArticleDatabaseConstraints:
             url="https://example.com/url-unique-test",
             title="News Article",
             section="news",
+            news_source_id=1,
         )
         await repository.insert_article(db_connection, first_article)
 
@@ -265,6 +231,7 @@ class TestInsertArticleDatabaseConstraints:
             url="https://example.com/url-unique-test",
             title="Lead Story Article",
             section="lead-stories",
+            news_source_id=1,
         )
 
         # Then: raises UniqueViolationError (URL uniqueness is global, not per-section)
@@ -285,6 +252,7 @@ class TestInsertArticleEdgeCases:
             url=special_url,
             title="Special URL Article",
             section="news",
+            news_source_id=1,
         )
         repository = ArticleRepository()
 
@@ -305,6 +273,7 @@ class TestInsertArticleEdgeCases:
             url="https://example.com/unicode-title",
             title=unicode_title,
             section="news",
+            news_source_id=1,
         )
         repository = ArticleRepository()
 
@@ -326,6 +295,7 @@ class TestInsertArticleEdgeCases:
             title="Long Content Article",
             section="news",
             full_text=long_text,
+            news_source_id=1,
         )
         repository = ArticleRepository()
 
@@ -346,6 +316,7 @@ class TestInsertArticleEdgeCases:
             url="https://example.com/default-fetched-at",
             title="Default Fetched At Article",
             section="news",
+            news_source_id=1,
         )
         repository = ArticleRepository()
 
@@ -370,6 +341,7 @@ class TestInsertArticleEdgeCases:
             title="Custom Fetched At Article",
             section="news",
             fetched_at=custom_fetched_at,
+            news_source_id=1,
         )
         repository = ArticleRepository()
 

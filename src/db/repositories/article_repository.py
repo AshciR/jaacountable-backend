@@ -44,6 +44,7 @@ class ArticleRepository:
             published_date=article.published_date,
             fetched_at=article.fetched_at,
             full_text=article.full_text,
+            news_source_id=article.news_source_id,
         )
 
         # Convert asyncpg.Record to Article model
@@ -57,4 +58,5 @@ class ArticleRepository:
             published_date=result['published_date'],
             fetched_at=result['fetched_at'],
             full_text=article.full_text,
+            news_source_id=result['news_source_id'],
         )

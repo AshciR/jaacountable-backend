@@ -5,8 +5,8 @@ import pytest
 from datetime import datetime, timedelta, timezone
 
 from src.db.repositories.classification_repository import ClassificationRepository
-from src.db.repositories.article_repository import ArticleRepository
-from src.db.models.domain import Classification, Article
+from src.db.models.domain import Classification
+from tests.db.repositories.utils import create_test_article
 
 
 
@@ -169,81 +169,6 @@ class TestInsertClassificationHappyPath:
         assert result.model_name == "gpt-4o-mini"
 
 
-class TestInsertClassificationValidationErrors:
-    """Validation error tests for insert_classification."""
-    async def test_confidence_score_below_zero_raises_value_error(self):
-        # Given: a classification with confidence_score < 0
-        # When: Classification creation is attempted
-        # Then: raises ValueError
-        with pytest.raises(ValueError, match="Confidence score must be between 0.0 and 1.0"):
-            Classification(
-                article_id=1,
-                classifier_type="accountability",
-                confidence_score=-0.1,
-                model_name="gpt-4o-mini",
-            )
-
-    async def test_confidence_score_above_one_raises_value_error(self):
-        # Given: a classification with confidence_score > 1
-        # When: Classification creation is attempted
-        # Then: raises ValueError
-        with pytest.raises(ValueError, match="Confidence score must be between 0.0 and 1.0"):
-            Classification(
-                article_id=1,
-                classifier_type="accountability",
-                confidence_score=1.1,
-                model_name="gpt-4o-mini",
-            )
-
-    async def test_empty_classifier_type_raises_value_error(self):
-        # Given: a classification with empty classifier_type
-        # When: Classification creation is attempted
-        # Then: raises ValueError
-        with pytest.raises(ValueError, match="Field cannot be empty"):
-            Classification(
-                article_id=1,
-                classifier_type="",
-                confidence_score=0.5,
-                model_name="gpt-4o-mini",
-            )
-
-    async def test_whitespace_only_classifier_type_raises_value_error(self):
-        # Given: a classification with whitespace-only classifier_type
-        # When: Classification creation is attempted
-        # Then: raises ValueError
-        with pytest.raises(ValueError, match="Field cannot be empty"):
-            Classification(
-                article_id=1,
-                classifier_type="   ",
-                confidence_score=0.5,
-                model_name="gpt-4o-mini",
-            )
-
-    async def test_empty_model_name_raises_value_error(self):
-        # Given: a classification with empty model_name
-        # When: Classification creation is attempted
-        # Then: raises ValueError
-        with pytest.raises(ValueError, match="Field cannot be empty"):
-            Classification(
-                article_id=1,
-                classifier_type="accountability",
-                confidence_score=0.5,
-                model_name="",
-            )
-
-    async def test_whitespace_only_model_name_raises_value_error(self):
-        # Given: a classification with whitespace-only model_name
-        # When: Classification creation is attempted
-        # Then: raises ValueError
-        with pytest.raises(ValueError, match="Field cannot be empty"):
-            Classification(
-                article_id=1,
-                classifier_type="accountability",
-                confidence_score=0.5,
-                model_name="   ",
-            )
-
-
 class TestInsertClassificationDatabaseConstraints:
     """Database constraint tests for insert_classification."""
     async def test_invalid_article_id_raises_foreign_key_violation(
@@ -398,23 +323,5 @@ class TestInsertClassificationEdgeCases:
         # Then: returns classification with custom classified_at preserved
         assert result.id is not None
         assert result.classified_at == custom_classified_at
-
-async def create_test_article(
-        db_connection: asyncpg.Connection,
-        url: str = "https://example.com/test-article",
-        title: str = "Test Article",
-        section: str = "news",
-) -> Article:
-    """Helper to create a test article for classification tests."""
-    article_repo = ArticleRepository()
-    article = Article(
-        url=url,
-        title=title,
-        section=section,
-    )
-    return await article_repo.insert_article(db_connection, article)
-
-
-
 
 

@@ -15,6 +15,7 @@ class Article(BaseModel):
     published_date: datetime | None = None
     fetched_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     full_text: str | None = None
+    news_source_id: int
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -76,3 +77,37 @@ class Classification(BaseModel):
         if not v or not v.strip():
             raise ValueError('Field cannot be empty')
         return v.strip()
+
+
+class NewsSource(BaseModel):
+    """
+    Pydantic model for NewsSource data validation and serialization.
+
+    Maps to the 'news_sources' database table schema.
+    Represents a news source that articles are scraped from.
+    """
+    id: int | None = None
+    name: str
+    base_url: str
+    crawl_delay: int = 10
+    is_active: bool = True
+    last_scraped_at: datetime | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator('name', 'base_url')
+    @classmethod
+    def validate_required_string(cls, v: str) -> str:
+        """Validate that required string fields are not empty."""
+        if not v or not v.strip():
+            raise ValueError('Field cannot be empty')
+        return v.strip()
+
+    @field_validator('crawl_delay')
+    @classmethod
+    def validate_crawl_delay(cls, v: int) -> int:
+        """Validate that crawl_delay is positive."""
+        if v < 0:
+            raise ValueError('Crawl delay must be non-negative')
+        return v
