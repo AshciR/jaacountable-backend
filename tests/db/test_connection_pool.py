@@ -40,6 +40,7 @@ class TestPoolConnectionRelease:
                     url=f"https://test.com/single-op-{unique_id}",
                     title="Single Operation Test",
                     section="test",
+                    news_source_id=1,
                 )
                 await repository.insert_article(conn, article)
 
@@ -68,6 +69,7 @@ class TestPoolConnectionRelease:
                         url=f"https://test.com/sequential-{i}-{unique_id}",
                         title=f"Sequential Test {i}",
                         section="test",
+                        news_source_id=1,
                     )
                     await repository.insert_article(conn, article)
 
@@ -91,6 +93,7 @@ class TestPoolConnectionRelease:
                     url=duplicate_url,
                     title="First Insert",
                     section="test",
+                    news_source_id=1,
                 )
                 await repository.insert_article(conn, first_article)
 
@@ -102,6 +105,7 @@ class TestPoolConnectionRelease:
                         url=duplicate_url,
                         title="Duplicate Insert",
                         section="test",
+                        news_source_id=1,
                     )
                     await repository.insert_article(conn, duplicate_article)
 
@@ -130,6 +134,7 @@ class TestPoolConcurrentOperations:
                         url=f"https://test.com/concurrent-{task_id}-{unique_id}",
                         title=f"Concurrent Article {task_id}",
                         section="test",
+                        news_source_id=1,
                     )
                     await repository.insert_article(conn, article)
                     # Small delay to ensure overlap
@@ -160,6 +165,7 @@ class TestPoolConcurrentOperations:
                         url=f"https://test.com/burst-{task_id}-{unique_id}",
                         title=f"Burst Article {task_id}",
                         section="test",
+                        news_source_id=1,
                     )
                     await repository.insert_article(conn, article)
 

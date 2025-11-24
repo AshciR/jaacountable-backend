@@ -6,7 +6,8 @@ INSERT INTO articles (
     section,
     published_date,
     fetched_at,
-    full_text
+    full_text,
+    news_source_id
 )
 VALUES (
     :url,
@@ -14,6 +15,7 @@ VALUES (
     :section,
     :published_date,
     :fetched_at,
-    :full_text
+    :full_text,
+    :news_source_id
 )
-RETURNING id, url, title, section, published_date, fetched_at;
+RETURNING id, url, title, section, published_date, fetched_at, news_source_id;
