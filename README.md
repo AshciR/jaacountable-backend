@@ -302,6 +302,151 @@ Note: Tests within a single file that use database fixtures run sequentially to 
    docker exec -it postgres psql -U user -d jaacountable_db -c "\dt"
    ```
 
+### Adding New Classifiers
+
+The system supports multiple AI classifiers for different accountability topics. Each classifier analyzes articles and determines relevance to its specific topic.
+
+**Current Classifiers:**
+- `CORRUPTION` - Detects corruption, contract irregularities, OCG investigations
+- `HURRICANE_RELIEF` - Tracks disaster relief fund allocation and management
+
+#### How to Add a New Classifier
+
+**Step 1: Add the Classifier Type**
+
+Edit `src/services/article_classification/models.py` and add your new classifier to the `ClassifierType` enum:
+
+```python
+class ClassifierType(str, Enum):
+    """Types of classifiers available for article analysis."""
+    CORRUPTION = "CORRUPTION"
+    HURRICANE_RELIEF = "HURRICANE_RELIEF"
+    EDUCATION_SPENDING = "EDUCATION_SPENDING"  # NEW CLASSIFIER
+```
+
+**Step 2: Write Tests for the New Classifier**
+
+Add tests to `tests/services/article_classification/test_models.py`:
+
+```python
+async def test_classifier_type_education_spending_succeeds(self):
+    # Given: a ClassificationResult with EDUCATION_SPENDING classifier_type
+    # When: creation is attempted
+    # Then: ClassificationResult is created successfully
+    result = ClassificationResult(
+        is_relevant=True,
+        confidence=0.90,
+        reasoning="Article discusses education budget allocation",
+        classifier_type=ClassifierType.EDUCATION_SPENDING,
+        model_name="gpt-4o-mini",
+    )
+    assert result.classifier_type == ClassifierType.EDUCATION_SPENDING
+```
+
+**Step 3: Implement the Classifier Agent**
+
+Create a new classifier agent that uses the `ClassificationInput` and returns `ClassificationResult`:
+
+```python
+from src.services.article_classification.models import (
+    ClassificationInput,
+    ClassificationResult,
+    ClassifierType,
+)
+
+async def classify_education_spending(input_data: ClassificationInput) -> ClassificationResult:
+    """
+    Classify article relevance to education spending accountability.
+
+    Args:
+        input_data: Article content and metadata
+
+    Returns:
+        Classification result with relevance decision and reasoning
+    """
+    # Your LLM agent implementation here
+    # Analyze input_data.full_text, input_data.title, etc.
+
+    return ClassificationResult(
+        is_relevant=True,
+        confidence=0.85,
+        reasoning="Article discusses education ministry budget allocation",
+        key_entities=["Ministry of Education", "Budget Allocation"],
+        classifier_type=ClassifierType.EDUCATION_SPENDING,
+        model_name="gpt-4o-mini",
+    )
+```
+
+**Step 4: Update Database Schema (if needed)**
+
+If you need to store classifier-specific metadata, create a new migration:
+
+```bash
+./scripts/create-migration.sh "add education_spending classifier support"
+```
+
+**Step 5: Run Tests**
+
+```bash
+# Run classification model tests
+uv run pytest tests/services/article_classification/test_models.py -v
+
+# Run your new classifier tests
+uv run pytest tests/services/article_classification/test_education_spending_classifier.py -v
+```
+
+#### Classification Workflow
+
+The classification system follows this workflow:
+
+1. **Extract** - Article content is extracted from news source
+   - Returns: `ExtractedArticleContent` (from `src/services/article_extractor/models.py`)
+
+2. **Prepare Input** - Create `ClassificationInput` from extracted content
+   ```python
+   classification_input = ClassificationInput(
+       url=url,
+       title=extracted.title,
+       section=section,  # From scraper context
+       full_text=extracted.full_text,
+       published_date=extracted.published_date,
+   )
+   ```
+
+3. **Classify** - Pass to classifier agent
+   ```python
+   result = await corruption_classifier.classify(classification_input)
+   ```
+
+4. **Store** - If relevant, store article and classification in database
+   ```python
+   if result.is_relevant:
+       # Store article (article_id generated here)
+       # Store classification with result.confidence, result.reasoning, etc.
+   ```
+
+#### Classification Models
+
+**`ClassificationInput`** - Input to classifier agents:
+- `url` (str) - Article URL
+- `title` (str) - Article title
+- `section` (str) - News section (e.g., "Lead Stories")
+- `full_text` (str) - Complete article text
+- `published_date` (datetime | None) - Publication timestamp
+
+**`ClassificationResult`** - Output from classifier agents:
+- `is_relevant` (bool) - Relevance decision
+- `confidence` (float) - Confidence score (0.0 to 1.0)
+- `reasoning` (str) - Explanation for decision
+- `key_entities` (list[str]) - Extracted entities
+- `classifier_type` (ClassifierType) - Which classifier produced this result
+- `model_name` (str) - LLM model used (e.g., "gpt-4o-mini")
+
+**`ClassifierType`** - Enum of available classifiers:
+- `CORRUPTION`
+- `HURRICANE_RELIEF`
+- Add your own as needed
+
 ## Contributing
 
 When contributing to this project, please ensure:
