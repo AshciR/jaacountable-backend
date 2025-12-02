@@ -180,3 +180,91 @@ The project also includes an evaluation set (`v1.evalset.json`) for testing agen
 3. Agent processes content using LLM to identify relevant articles
 4. Returns structured JSON with article metadata and relevance scores
 5. (Future) Articles stored in PostgreSQL via asyncpg for persistence and deduplication
+
+### Classification System Architecture
+
+The project includes a modular classification system for AI-based article analysis. This system is separate from the initial news gathering agent and focuses on determining article relevance to specific accountability topics.
+
+**Key Design Principles:**
+- **Separation of Concerns**: Classification schemas (agent I/O) are separate from database models (persistence)
+- **Classification Before Storage**: Articles are classified BEFORE database storage, so `article_id` is not available during classification
+- **Type-Safe Classifier Identification**: Uses `ClassifierType` enum for type safety and JSON serialization
+- **Comprehensive Validation**: Pydantic v2 models with extensive field validators
+- **Extensible**: New classifiers can be added by extending the `ClassifierType` enum
+
+**Classification Workflow:**
+```
+Extract → ClassificationInput → Classifier Agent → ClassificationResult → Store if relevant (article_id generated)
+```
+
+**Core Models (`src/services/article_classification/models.py`):**
+
+1. **`ClassifierType` enum** (lines 7-24):
+   - First enum in codebase using `(str, Enum)` pattern for JSON serialization
+   - Type-safe classifier identification
+   - Current values: `CORRUPTION`, `HURRICANE_RELIEF`
+   - Add new classifiers by extending this enum
+
+2. **`ClassificationInput` model** (lines 27-125):
+   - Interface between extraction and classification layers
+   - 5 fields: `url`, `title`, `section`, `full_text`, `published_date`
+   - **Important**: No `article_id` field (classification happens before storage)
+   - Validators for URL format, minimum text length (50 chars), timezone-aware datetimes
+   - Constructed from `ExtractedArticleContent` + scraper context
+
+3. **`ClassificationResult` model** (lines 128-199):
+   - Structured output from classifier agents
+   - 6 fields: `is_relevant`, `confidence`, `reasoning`, `key_entities`, `classifier_type`, `model_name`
+   - `key_entities` defaults to `[]` (not `None`) for better ergonomics
+   - `confidence` validated between 0.0 and 1.0
+   - `model_name` included for traceability (tracks which LLM produced the result)
+   - Validators for all fields with whitespace stripping and entity cleaning
+
+**Test Coverage (`tests/services/article_classification/test_models.py`):**
+- 62 total tests, all following BDD-style (Given/When/Then) format
+- TestClassificationInputValidation: 25 tests
+- TestClassifierTypeEnum: 5 tests
+- TestClassificationResultValidation: 32 tests
+- All tests use async pattern with pytest-asyncio
+- Comprehensive validation testing, boundary conditions, edge cases (Unicode, very long text)
+
+**Adding a New Classifier:**
+
+1. **Update `ClassifierType` enum:**
+   ```python
+   class ClassifierType(str, Enum):
+       CORRUPTION = "CORRUPTION"
+       HURRICANE_RELIEF = "HURRICANE_RELIEF"
+       NEW_CLASSIFIER = "NEW_CLASSIFIER"  # Add here
+   ```
+
+2. **Add enum test** in `TestClassifierTypeEnum`:
+   ```python
+   async def test_classifier_type_new_classifier_succeeds(self):
+       result = ClassificationResult(
+           is_relevant=True,
+           confidence=0.85,
+           reasoning="Test reasoning",
+           classifier_type=ClassifierType.NEW_CLASSIFIER,
+           model_name="gpt-4o-mini",
+       )
+       assert result.classifier_type == ClassifierType.NEW_CLASSIFIER
+   ```
+
+3. **Implement classifier agent** that accepts `ClassificationInput` and returns `ClassificationResult`
+
+4. **Write comprehensive tests** for the new classifier agent
+
+5. **Update database schema** if needed (create migration for classifier-specific columns)
+
+**Important Notes:**
+- Classification models use Pydantic v2 with `ConfigDict(from_attributes=True)`
+- All validators use `@field_validator` decorator (Pydantic v2 pattern)
+- Python 3.12+ type hints: `str | None` instead of `Optional[str]`
+- `key_entities` uses list cleaning validator (strips whitespace, filters empty strings)
+- All timestamp fields must be timezone-aware (`datetime.now(timezone.utc)`)
+- First enum in codebase - established `(str, Enum)` pattern for JSON serialization
+
+**Related Models:**
+- `src/services/article_extractor/models.py` - `ExtractedArticleContent` (input to classification)
+- `src/db/models/domain.py` - Database models for persistence (separate from classification schemas)

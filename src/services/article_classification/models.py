@@ -1,6 +1,27 @@
 """Classification models for article classification service."""
 from datetime import datetime
+from enum import Enum
 from pydantic import BaseModel, field_validator, ConfigDict
+
+
+class ClassifierType(str, Enum):
+    """
+    Types of classifiers available for article analysis.
+
+    Each classifier focuses on a specific accountability topic:
+    - CORRUPTION: Detects corruption, contract irregularities, OCG investigations
+    - HURRICANE_RELIEF: Tracks disaster relief fund allocation and management
+
+    Example:
+        >>> classifier_type = ClassifierType.CORRUPTION
+        >>> classifier_type.value
+        'CORRUPTION'
+        >>> ClassifierType.HURRICANE_RELIEF
+        <ClassifierType.HURRICANE_RELIEF: 'HURRICANE_RELIEF'>
+    """
+
+    CORRUPTION = "CORRUPTION"
+    HURRICANE_RELIEF = "HURRICANE_RELIEF"
 
 
 class ClassificationInput(BaseModel):
@@ -102,3 +123,77 @@ class ClassificationInput(BaseModel):
             raise ValueError('Published date must be timezone-aware')
 
         return v
+
+
+class ClassificationResult(BaseModel):
+    """
+    Output from article classification agents.
+
+    This model represents the structured result returned by classifier agents
+    after analyzing an article for relevance to a specific accountability topic.
+    The result includes a binary relevance decision, confidence score, reasoning
+    for transparency, and optionally extracted key entities.
+
+    Workflow Position:
+        Extract → ClassificationInput → Classifier Agent → **ClassificationResult** → Database
+
+    Mapping to Database (Classification model):
+        - ClassificationResult.is_relevant → Threshold logic for storage decision
+        - ClassificationResult.confidence → Classification.confidence_score
+        - ClassificationResult.reasoning → Classification.reasoning
+        - ClassificationResult.classifier_type → Classification.classifier_type
+        - ClassificationResult.model_name → Classification.model_name
+        - ClassificationResult.key_entities → Not currently stored (future enhancement)
+
+    Example:
+        >>> result = ClassificationResult(
+        ...     is_relevant=True,
+        ...     confidence=0.85,
+        ...     reasoning="Article discusses OCG investigation into contract irregularities at Ministry of Education",
+        ...     key_entities=["OCG", "Ministry of Education", "Contract Irregularities"],
+        ...     classifier_type=ClassifierType.CORRUPTION,
+        ...     model_name="gpt-4o-mini"
+        ... )
+        >>> result.is_relevant
+        True
+        >>> result.key_entities
+        ['OCG', 'Ministry of Education', 'Contract Irregularities']
+        >>> result.model_name
+        'gpt-4o-mini'
+    """
+
+    is_relevant: bool
+    confidence: float
+    reasoning: str
+    key_entities: list[str] = []
+    classifier_type: ClassifierType
+    model_name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator('confidence')
+    @classmethod
+    def validate_confidence(cls, v: float) -> float:
+        """Validate that confidence is between 0.0 and 1.0."""
+        if v < 0.0 or v > 1.0:
+            raise ValueError('Confidence must be between 0.0 and 1.0')
+        return v
+
+    @field_validator('reasoning', 'model_name')
+    @classmethod
+    def validate_required_string(cls, v: str) -> str:
+        """Validate that required string fields are not empty."""
+        if not v or not v.strip():
+            raise ValueError('Field cannot be empty')
+        return v.strip()
+
+    @field_validator('key_entities')
+    @classmethod
+    def validate_key_entities(cls, v: list[str]) -> list[str]:
+        """Validate and clean each entity in the list."""
+        if not isinstance(v, list):
+            raise ValueError('Key entities must be a list')
+
+        # Strip whitespace from each entity and filter out empty strings
+        cleaned = [entity.strip() for entity in v if entity and entity.strip()]
+        return cleaned
