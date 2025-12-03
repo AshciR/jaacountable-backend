@@ -230,9 +230,36 @@ The project uses:
 
 The project uses pytest with testcontainers for isolated database testing. Each test session spins up a fresh PostgreSQL container and runs migrations automatically.
 
-**Run all tests:**
+#### Test Categories
+
+**Unit Tests:**
+- Use mocks to simulate LLM responses
+- No actual API calls made
+- Fast execution
+- Run by default during local development
+
+**Integration Tests:**
+- Make actual LLM API calls to validate end-to-end functionality
+- Require `OPENAI_API_KEY` in `.env` file
+- Slower execution and incur API costs
+- Marked with `@pytest.mark.integration`
+- Run during CI to ensure classifier works correctly
+
+#### Running Tests
+
+**Run all tests (unit + integration):**
 ```bash
 uv run pytest tests/
+```
+
+**Run only unit tests (skip integration - no LLM API calls):**
+```bash
+uv run pytest tests/ -m "not integration"
+```
+
+**Run only integration tests (requires API key):**
+```bash
+uv run pytest tests/ -m integration
 ```
 
 **Run tests with verbose output:**
@@ -245,18 +272,15 @@ uv run pytest tests/ -v
 uv run pytest tests/ -v --log-cli-level=INFO
 ```
 
+**Run a specific test file:**
+```bash
+uv run pytest tests/services/article_classification/test_corruption_adapter.py -v
+```
+
 **Run a specific test class:**
 ```bash
 uv run pytest tests/db/repositories/test_article_repository.py::TestInsertArticleHappyPath -v
 ```
-
-**Test Features:**
-- Automatic PostgreSQL container lifecycle management
-- Alembic migrations run automatically on test database
-- Transaction rollback after each test for isolation
-- BDD-style test format (Given/When/Then comments)
-- Tests organized into classes by category (HappyPath, ValidationErrors, DatabaseConstraints, EdgeCases)
-- pytest-xdist available for parallel test execution across multiple test files
 
 **Parallel Test Execution:**
 
@@ -265,9 +289,26 @@ The project includes pytest-xdist for running tests in parallel. Due to session-
 ```bash
 # Run test files in parallel (each file runs in its own worker)
 uv run pytest tests/ -n auto --dist loadfile
+
+# Run only unit tests in parallel (skip integration)
+uv run pytest tests/ -n auto --dist loadfile -m "not integration"
 ```
 
 Note: Tests within a single file that use database fixtures run sequentially to maintain event loop compatibility.
+
+#### Test Features
+
+- **Automatic PostgreSQL container lifecycle management**
+- **Alembic migrations run automatically on test database**
+- **Transaction rollback after each test for isolation**
+- **BDD-style test format** (Given/When/Then comments)
+- **Tests organized into classes by category** (HappyPath, ValidationErrors, DatabaseConstraints, EdgeCases)
+- **pytest-xdist** available for parallel test execution across multiple test files
+- **Integration test markers** registered in `pyproject.toml` for selective test execution
+
+#### CI/CD
+
+GitHub Actions CI runs **all tests** (including integration tests) using the `CLASSIFIER_AGENTS_CI` secret for the API key. This ensures the classifier works correctly with real LLM calls before merging.
 
 ### Database Development Workflow
 
