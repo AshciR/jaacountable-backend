@@ -1,7 +1,13 @@
 """Base protocol for article classification strategies."""
 from typing import Protocol
+from dotenv import load_dotenv
 from .models import ClassificationInput, ClassificationResult
 
+# Load environment variables from .env file
+load_dotenv()
+
+APP_NAME = "jaccountable_backend"
+CLASSIFICATION_MODEL = "gpt-5-nano"
 
 class ArticleClassifier(Protocol):
     """
@@ -37,8 +43,8 @@ class ArticleClassifier(Protocol):
                     optional published_date.
 
         Returns:
-            ClassificationResult with is_relevant, confidence, reasoning,
-            key_entities, classifier_type, and model_name.
+            ClassificationResult with is_relevant (true/false), confidence,
+            reasoning, key_entities, classifier_type, and model_name.
 
         Raises:
             ValueError: If article data is invalid or classification fails
