@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from src.article_persistence.repositories.classification_repository import ClassificationRepository
 from src.article_persistence.models.domain import Classification
-from tests.services.article_persistence.repositories.utils import create_test_article
+from tests.article_persistence.repositories.utils import create_test_article
 
 
 
