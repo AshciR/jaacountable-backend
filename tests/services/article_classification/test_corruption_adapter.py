@@ -4,10 +4,10 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from src.services.article_classification.agents.corruption_classifier import (
+from src.article_classification.agents.corruption_classifier import (
     CorruptionClassifier,
 )
-from src.services.article_classification.models import (
+from src.article_classification.models import (
     ClassificationInput,
     ClassificationResult,
     ClassifierType,

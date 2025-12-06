@@ -2,8 +2,8 @@
 import pytest
 from datetime import datetime, timezone
 
-from src.services.article_extractor.gleaner_extractor import GleanerExtractor
-from src.services.article_extractor.models import ExtractedArticleContent
+from src.article_extractor.gleaner_extractor import GleanerExtractor
+from src.article_extractor.models import ExtractedArticleContent
 
 
 class TestGleanerExtractorHappyPath:

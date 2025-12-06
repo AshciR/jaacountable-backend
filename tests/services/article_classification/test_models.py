@@ -4,7 +4,7 @@ import pytest
 from datetime import datetime, timezone
 from pydantic import ValidationError
 
-from src.services.article_classification.models import (
+from src.article_classification.models import (
     ClassificationInput,
     ClassifierType,
     ClassificationResult,

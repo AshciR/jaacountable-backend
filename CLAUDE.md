@@ -68,7 +68,7 @@ This suggests the project is designed to work with Google ADK's web interface.
 **Common Operations:**
 ```bash
 # Start database
-./scripts/start-db.sh
+./scripts/start-article_persistence.sh
 
 # Run migrations
 ./scripts/migrate.sh
@@ -155,7 +155,7 @@ uv run pytest tests/services/article_classification/test_corruption_adapter.py -
 
 **Run a specific test class:**
 ```bash
-uv run pytest tests/db/repositories/test_article_repository.py::TestInsertArticleHappyPath -v
+uv run pytest tests/article_persistence/repositories/test_article_repository.py::TestInsertArticleHappyPath -v
 ```
 
 **Parallel Test Execution:**

@@ -4,9 +4,9 @@ import asyncpg
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from src.db.repositories.classification_repository import ClassificationRepository
-from src.db.models.domain import Classification
-from tests.db.repositories.utils import create_test_article
+from src.article_persistence.repositories.classification_repository import ClassificationRepository
+from src.article_persistence.models.domain import Classification
+from tests.services.article_persistence.repositories.utils import create_test_article
 
 
 

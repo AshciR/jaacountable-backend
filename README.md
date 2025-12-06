@@ -64,7 +64,7 @@ The system specifically looks for articles mentioning:
 
 5. **Start the PostgreSQL database**:
    ```bash
-   ./scripts/start-db.sh
+   ./scripts/start-article_persistence.sh
    ```
 
    This will start a PostgreSQL 18 container using Docker Compose.
@@ -104,7 +104,7 @@ All scripts are located in the `scripts/` directory:
 
 **Start the database:**
 ```bash
-./scripts/start-db.sh
+./scripts/start-article_persistence.sh
 ```
 
 **Run migrations:**
@@ -279,7 +279,7 @@ uv run pytest tests/services/article_classification/test_corruption_adapter.py -
 
 **Run a specific test class:**
 ```bash
-uv run pytest tests/db/repositories/test_article_repository.py::TestInsertArticleHappyPath -v
+uv run pytest tests/article_persistence/repositories/test_article_repository.py::TestInsertArticleHappyPath -v
 ```
 
 **Parallel Test Execution:**
@@ -389,7 +389,7 @@ async def test_classifier_type_education_spending_succeeds(self):
 Create a new classifier agent that uses the `ClassificationInput` and returns `ClassificationResult`:
 
 ```python
-from src.services.article_classification.models import (
+from src.article_classification.models import (
     ClassificationInput,
     ClassificationResult,
     ClassifierType,

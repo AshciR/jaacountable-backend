@@ -3,7 +3,7 @@ import aiosql
 from pathlib import Path
 import asyncpg
 
-from src.db.models.domain import Classification
+from src.article_persistence.models.domain import Classification
 
 
 class ClassificationRepository:

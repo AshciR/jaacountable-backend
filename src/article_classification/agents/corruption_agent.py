@@ -2,8 +2,8 @@
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
 
-from src.services.article_classification.base import CLASSIFICATION_MODEL
-from src.services.article_classification.models import ClassificationResult
+from src.article_classification.base import CLASSIFICATION_MODEL
+from src.article_classification.models import ClassificationResult
 
 instruction = f"""
 You are a specialized corruption and government accountability classifier for Jamaican news articles.
