@@ -4,8 +4,8 @@ import asyncpg
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from src.db.repositories.news_source_repository import NewsSourceRepository
-from src.db.models.domain import NewsSource
+from src.article_persistence.repositories.news_source_repository import NewsSourceRepository
+from src.article_persistence.models.domain import NewsSource
 
 
 class TestInsertNewsSourceHappyPath:

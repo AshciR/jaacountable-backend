@@ -1,7 +1,7 @@
 """Tests for ArticleExtractionService."""
 import pytest
 
-from src.services.article_extractor.service import (
+from src.article_extractor.service import (
     ArticleExtractionService,
     _parse_and_validate_url,
 )

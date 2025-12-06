@@ -3,7 +3,7 @@ import aiosql
 from pathlib import Path
 import asyncpg
 
-from src.db.models.domain import NewsSource
+from src.article_persistence.models.domain import NewsSource
 
 
 class NewsSourceRepository:

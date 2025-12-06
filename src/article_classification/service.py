@@ -16,7 +16,7 @@ class ClassificationService:
 
     Usage:
         # With multiple classifiers
-        from src.services.article_classification.agents import CorruptionClassifierAdapter
+        from src.article_classification.agents import CorruptionClassifierAdapter
 
         corruption_classifier = CorruptionClassifierAdapter()
         # hurricane_classifier = HurricaneReliefClassifierAdapter()  # Future

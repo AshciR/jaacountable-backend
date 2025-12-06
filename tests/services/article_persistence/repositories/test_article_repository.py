@@ -4,9 +4,9 @@ import asyncpg
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from src.db.repositories.article_repository import ArticleRepository
-from src.db.models.domain import Article
-from tests.db.repositories.utils import create_test_news_source
+from src.article_persistence.repositories.article_repository import ArticleRepository
+from src.article_persistence.models.domain import Article
+from tests.services.article_persistence.repositories.utils import create_test_news_source
 
 
 class TestInsertArticleHappyPath:

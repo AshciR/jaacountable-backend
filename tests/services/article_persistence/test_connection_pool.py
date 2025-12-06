@@ -6,8 +6,8 @@ import uuid
 import asyncpg
 import pytest
 
-from src.db.repositories.article_repository import ArticleRepository
-from src.db.models.domain import Article
+from src.article_persistence.repositories.article_repository import ArticleRepository
+from src.article_persistence.models.domain import Article
 
 
 def get_pool_stats(pool: asyncpg.Pool) -> dict[str, int]:

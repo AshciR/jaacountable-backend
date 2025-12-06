@@ -2,9 +2,9 @@
 
 import asyncpg
 
-from src.db.models.domain import Article, NewsSource
-from src.db.repositories.article_repository import ArticleRepository
-from src.db.repositories.news_source_repository import NewsSourceRepository
+from src.article_persistence.models.domain import Article, NewsSource
+from src.article_persistence.repositories.article_repository import ArticleRepository
+from src.article_persistence.repositories.news_source_repository import NewsSourceRepository
 
 
 async def create_test_news_source(

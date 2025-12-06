@@ -82,8 +82,8 @@ def run_migrations(test_database_url: str) -> None:
     alembic_cfg = Config(str(alembic_ini_path))
 
     # Convert psycopg2 URL format to SQLAlchemy async format
-    # testcontainers returns: postgresql+psycopg2://user:pass@host:port/db
-    # We need: postgresql+asyncpg://user:pass@host:port/db
+    # testcontainers returns: postgresql+psycopg2://user:pass@host:port/article_persistence
+    # We need: postgresql+asyncpg://user:pass@host:port/article_persistence
     sqlalchemy_url = test_database_url.replace(
         "postgresql+psycopg2://", "postgresql+asyncpg://"
     )
@@ -110,8 +110,8 @@ async def db_pool(
     before creating the pool.
     """
     # Convert testcontainers URL to asyncpg format expected by DatabaseConfig
-    # testcontainers returns: postgresql+psycopg2://user:pass@host:port/db
-    # DatabaseConfig expects: postgresql+asyncpg://user:pass@host:port/db
+    # testcontainers returns: postgresql+psycopg2://user:pass@host:port/article_persistence
+    # DatabaseConfig expects: postgresql+asyncpg://user:pass@host:port/article_persistence
     database_url = test_database_url.replace(
         "postgresql+psycopg2://", "postgresql+asyncpg://"
     )

@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.db.models.domain import Article, Classification, NewsSource
+from src.article_persistence.models.domain import Article, Classification, NewsSource
 
 
 class TestArticleValidation:

@@ -6,7 +6,7 @@ from google.adk.sessions import InMemorySessionService, Session, BaseSessionServ
 from google.genai import types
 from google.genai.types import Content
 
-from src.services.article_classification.models import (
+from src.article_classification.models import (
     ClassificationInput,
     ClassificationResult,
 )

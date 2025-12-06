@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 import asyncpg
 
-from src.db.models.domain import Article
+from src.article_persistence.models.domain import Article
 
 
 class ArticleRepository:
