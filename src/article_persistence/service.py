@@ -10,7 +10,7 @@ from asyncpg import UniqueViolationError
 
 from src.article_extractor.models import ExtractedArticleContent
 from src.article_classification.models import ClassificationResult
-from src.orchestration.converters import (
+from .converters import (
     extracted_content_to_article,
     classification_result_to_classification,
 )
