@@ -22,7 +22,7 @@ from config.database import db_config
 from src.article_extractor.service import ArticleExtractionService
 from src.article_classification.service import ClassificationService
 from src.article_classification.agents.corruption_classifier import CorruptionClassifier
-from src.article_persistence.service import store_article_with_classifications
+from src.article_persistence.service import PostgresArticlePersistenceService
 from src.orchestration.converters import (
     extracted_content_to_classification_input,
     filter_relevant_classifications,
@@ -108,14 +108,16 @@ async def validate_pipeline(url: str, section: str = "news") -> None:
 
         try:
             # Store article with classifications
-            result = await store_article_with_classifications(
-                db_config=db_config,
-                extracted=extracted,
-                url=url,
-                section=section,
-                relevant_classifications=relevant_results,
-                news_source_id=1,  # Jamaica Gleaner
-            )
+            service = PostgresArticlePersistenceService()
+            async with db_config.connection() as conn:
+                result = await service.store_article_with_classifications(
+                    conn=conn,
+                    extracted=extracted,
+                    url=url,
+                    section=section,
+                    relevant_classifications=relevant_results,
+                    news_source_id=1,  # Jamaica Gleaner
+                )
 
             if result.stored:
                 logger.info(f"  ✓ Article stored with ID: {result.article_id}")
