@@ -4,7 +4,6 @@ Article persistence service layer.
 Provides high-level operations for storing articles and classifications.
 """
 import logging
-from typing import Any
 
 from asyncpg import UniqueViolationError
 
@@ -15,6 +14,7 @@ from src.orchestration.converters import (
     extracted_content_to_article,
     classification_result_to_classification,
 )
+from .models.domain import ArticleStorageResult
 from .repositories.article_repository import ArticleRepository
 from .repositories.classification_repository import ClassificationRepository
 
@@ -29,7 +29,7 @@ async def store_article_with_classifications(
     section: str,
     relevant_classifications: list[ClassificationResult],
     news_source_id: int = 1,
-) -> dict[str, Any]:
+) -> ArticleStorageResult:
     """
     Store an article with its classifications in a single transaction.
 
@@ -42,11 +42,12 @@ async def store_article_with_classifications(
         news_source_id: Database ID of news source (default: 1 for Jamaica Gleaner)
 
     Returns:
-        Dictionary with:
+        ArticleStorageResult with:
             - stored: bool (True if stored, False if duplicate)
             - article_id: int | None (ID of stored article, None if duplicate)
             - classification_count: int (number of classifications stored)
             - article: Article | None (stored article model, None if duplicate)
+            - classifications: list[Classification] (list of stored classifications)
 
     Raises:
         Exception: If storage fails (not including duplicates)
@@ -59,7 +60,7 @@ async def store_article_with_classifications(
         ...     section="news",
         ...     relevant_classifications=relevant_results,
         ... )
-        >>> print(f"Stored article ID: {result['article_id']}")
+        >>> print(f"Stored article ID: {result.article_id}")
     """
     article_repo = ArticleRepository()
     classification_repo = ClassificationRepository()
@@ -82,32 +83,34 @@ async def store_article_with_classifications(
             except UniqueViolationError:
                 # Article already exists (URL unique constraint)
                 logger.info(f"Article already exists, skipping: {url}")
-                return {
-                    "stored": False,
-                    "article_id": None,
-                    "classification_count": 0,
-                    "article": None,
-                }
+                return ArticleStorageResult(
+                    stored=False,
+                    article_id=None,
+                    classification_count=0,
+                    article=None,
+                    classifications=[],
+                )
 
             # Insert classifications
-            classification_count = 0
+            stored_classifications = []
             for result in relevant_classifications:
                 classification = classification_result_to_classification(
                     result=result,
                     article_id=stored_article.id,  # type: ignore
                 )
-                await classification_repo.insert_classification(
+                stored_classification = await classification_repo.insert_classification(
                     conn, classification
                 )
-                classification_count += 1
+                stored_classifications.append(stored_classification)
                 logger.info(
                     f"Classification stored (type: {result.classifier_type.value}, "
                     f"confidence: {result.confidence:.2f})"
                 )
 
-            return {
-                "stored": True,
-                "article_id": stored_article.id,
-                "classification_count": classification_count,
-                "article": stored_article,
-            }
+            return ArticleStorageResult(
+                stored=True,
+                article_id=stored_article.id,
+                classification_count=len(stored_classifications),
+                article=stored_article,
+                classifications=stored_classifications,
+            )
