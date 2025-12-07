@@ -1,51 +1,9 @@
-"""
-Model conversion utilities for orchestration workflow.
-
-Converts between service layer models and database domain models.
-"""
+"""Model conversion utilities for persistence layer."""
 from datetime import datetime, timezone
 
 from src.article_extractor.models import ExtractedArticleContent
-from src.article_classification.models import (
-    ClassificationInput,
-    ClassificationResult,
-)
-from src.article_persistence.models.domain import Article, Classification
-
-
-def extracted_content_to_classification_input(
-    extracted: ExtractedArticleContent,
-    url: str,
-    section: str
-) -> ClassificationInput:
-    """
-    Convert ExtractedArticleContent to ClassificationInput.
-
-    Combines extracted content with context from discovery.
-
-    Args:
-        extracted: Content from ArticleExtractionService
-        url: Original article URL
-        section: Article section/category (e.g., "news", "lead-stories")
-
-    Returns:
-        ClassificationInput ready for ClassificationService
-
-    Example:
-        >>> extracted = extractor.extract_article_content(url)
-        >>> classification_input = extracted_content_to_classification_input(
-        ...     extracted=extracted,
-        ...     url=url,
-        ...     section="news"
-        ... )
-    """
-    return ClassificationInput(
-        url=url,
-        title=extracted.title,
-        section=section,
-        full_text=extracted.full_text,
-        published_date=extracted.published_date,
-    )
+from src.article_classification.models import ClassificationResult
+from .models.domain import Article, Classification
 
 
 def extracted_content_to_article(
@@ -125,38 +83,3 @@ def classification_result_to_classification(
         verified_at=None,
         verified_by=None,
     )
-
-
-def filter_relevant_classifications(
-    results: list[ClassificationResult],
-    min_confidence: float = 0.7
-) -> list[ClassificationResult]:
-    """
-    Filter classification results to only relevant articles.
-
-    An article is relevant if AT LEAST ONE classifier marks it as:
-    - is_relevant = True
-    - confidence >= min_confidence
-
-    Args:
-        results: Classification results from ClassificationService
-        min_confidence: Minimum confidence threshold (default: 0.7)
-
-    Returns:
-        List of relevant classification results (may be empty)
-
-    Example:
-        >>> # Only store if relevant
-        >>> relevant = filter_relevant_classifications(
-        ...     results=classification_results,
-        ...     min_confidence=0.7
-        ... )
-        >>> if relevant:
-        ...     # Store article and classifications
-        ...     pass
-    """
-    return [
-        result
-        for result in results
-        if result.is_relevant and result.confidence >= min_confidence
-    ]

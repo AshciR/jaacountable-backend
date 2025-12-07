@@ -19,14 +19,8 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from config.database import db_config
-from src.article_extractor.service import ArticleExtractionService
-from src.article_classification.service import ClassificationService
-from src.article_classification.agents.corruption_classifier import CorruptionClassifier
-from src.article_persistence.service import PostgresArticlePersistenceService
-from src.orchestration.converters import (
-    extracted_content_to_classification_input,
-    filter_relevant_classifications,
-)
+from src.orchestration.service import PipelineOrchestrationService
+from src.orchestration.models import OrchestrationResult
 
 
 logging.basicConfig(
@@ -46,99 +40,73 @@ async def validate_pipeline(url: str, section: str = "news") -> None:
     """
     logger.info(f"Starting pipeline validation for URL: {url}")
 
-    # Initialize services
-    extraction_service = ArticleExtractionService()
-    classification_service = ClassificationService(
-        classifiers=[
-            CorruptionClassifier(),
-        ]
-    )
+    # Initialize orchestration service
+    service = PipelineOrchestrationService()
+
+    # Initialize database pool
+    await db_config.create_pool()
 
     try:
-        # Step 1: Extract article content
-        logger.info("Step 1: Extracting article content...")
-        extracted = extraction_service.extract_article_content(url)
-        logger.info(f"  ✓ Extracted: {extracted.title[:100]}...")
-        logger.info(f"  ✓ Full text length: {len(extracted.full_text)} characters")
-
-        # Step 2: Convert to classification input
-        logger.info("Step 2: Converting to classification input...")
-        classification_input = extracted_content_to_classification_input(
-            extracted=extracted,
-            url=url,
-            section=section,
-        )
-        logger.info(f"  ✓ Classification input ready")
-
-        # Step 3: Classify article
-        logger.info("Step 3: Classifying article...")
-        classification_results = await classification_service.classify(
-            classification_input
-        )
-        logger.info(f"  ✓ Received {len(classification_results)} classification results")
-
-        for i, result in enumerate(classification_results, 1):
-            logger.info(
-                f"    - Classifier {i} ({result.classifier_type.value}): "
-                f"relevant={result.is_relevant}, confidence={result.confidence:.2f}"
+        # Process article through pipeline
+        async with db_config.connection() as conn:
+            result = await service.process_article(
+                conn=conn,
+                url=url,
+                section=section,
+                news_source_id=1,  # Jamaica Gleaner
+                min_confidence=0.7,
             )
-            if result.reasoning:
-                logger.info(f"      Reasoning: {result.reasoning[:200]}...")
 
-        # Step 4: Filter relevant classifications
-        logger.info("Step 4: Filtering relevant classifications (min confidence: 0.7)...")
-        relevant_results = filter_relevant_classifications(
-            results=classification_results,
-            min_confidence=0.7,
-        )
+        # Log results based on OrchestrationResult
+        _log_pipeline_result(result)
 
-        if not relevant_results:
-            logger.info("  ✗ Article is NOT relevant (skipping storage)")
-            logger.info("\n=== VALIDATION COMPLETE ===")
-            logger.info("Article was not stored (below relevance threshold)")
-            return
+        # Raise exception if there was an error
+        if result.error:
+            raise Exception(result.error)
 
-        logger.info(f"  ✓ Article IS relevant ({len(relevant_results)} classifiers passed)")
+    finally:
+        await db_config.close_pool()
 
-        # Step 5: Store article and classifications
-        logger.info("Step 5: Storing article and classifications in database...")
 
-        # Initialize database pool
-        await db_config.create_pool()
+def _log_pipeline_result(result: OrchestrationResult) -> None:
+    """Log the pipeline processing result."""
 
-        try:
-            # Store article with classifications
-            service = PostgresArticlePersistenceService()
-            async with db_config.connection() as conn:
-                result = await service.store_article_with_classifications(
-                    conn=conn,
-                    extracted=extracted,
-                    url=url,
-                    section=section,
-                    relevant_classifications=relevant_results,
-                    news_source_id=1,  # Jamaica Gleaner
-                )
+    if result.error:
+        logger.error(f"Pipeline failed: {result.error}")
+        return
 
-            if result.stored:
-                logger.info(f"  ✓ Article stored with ID: {result.article_id}")
-                logger.info(f"  ✓ Stored {result.classification_count} classifications")
+    # Log extraction
+    if result.extracted:
+        logger.info("✓ Article extracted successfully")
 
-                logger.info("\n=== VALIDATION COMPLETE ===")
-                logger.info(f"Article ID: {result.article_id}")
-                logger.info(f"Title: {result.article.title}")  # type: ignore
-                logger.info(f"Relevant classifications: {result.classification_count}")
-                logger.info("✓ Pipeline integration successful!")
-            else:
-                logger.info("  ⚠ Article already exists in database (duplicate URL)")
-                logger.info("\n=== VALIDATION COMPLETE ===")
-                logger.info("Article was not stored (duplicate)")
+    # Log classification
+    if result.classified:
+        logger.info(f"✓ Article classified ({len(result.classification_results)} results)")
+        for cr in result.classification_results:
+            logger.info(
+                f"  - {cr.classifier_type.value}: "
+                f"relevant={cr.is_relevant}, confidence={cr.confidence:.2f}"
+            )
 
-        finally:
-            await db_config.close_pool()
+    # Log relevance
+    if result.relevant:
+        logger.info(f"✓ Article is relevant ({result.classification_count} classifiers passed)")
+    else:
+        logger.info("✗ Article is NOT relevant (skipping storage)")
 
-    except Exception as e:
-        logger.error(f"Pipeline validation failed: {e}", exc_info=True)
-        raise
+    # Log storage
+    if result.stored:
+        logger.info(f"✓ Article stored with ID: {result.article_id}")
+        logger.info(f"✓ Stored {result.classification_count} classifications")
+        logger.info("\n=== VALIDATION COMPLETE ===")
+        logger.info("✓ Pipeline integration successful!")
+    elif result.relevant and not result.stored:
+        logger.info("⚠ Article already exists in database (duplicate URL)")
+        logger.info("\n=== VALIDATION COMPLETE ===")
+        logger.info("Article was not stored (duplicate)")
+    else:
+        logger.info("\n=== VALIDATION COMPLETE ===")
+        logger.info("Article was not stored (below relevance threshold)")
 
 
 async def main() -> None:
