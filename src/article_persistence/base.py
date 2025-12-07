@@ -1,6 +1,6 @@
 """Base protocol for article persistence services."""
 from typing import Protocol
-from config.database import DatabaseConfig
+import asyncpg
 from src.article_extractor.models import ExtractedArticleContent
 from src.article_classification.models import ClassificationResult
 from .models.domain import ArticleStorageResult
@@ -19,11 +19,16 @@ class ArticlePersistenceService(Protocol):
     - No need to inherit from a base class
     - Duck typing with type safety
     - Easy to mock in tests
+
+    Note on transaction management:
+    - Caller manages connection lifecycle (gets from db_config.connection())
+    - Service manages transaction boundaries (creates from connection)
+    - This separation allows for clean, testable code
     """
 
     async def store_article_with_classifications(
         self,
-        db_config: DatabaseConfig,
+        conn: asyncpg.Connection,
         extracted: ExtractedArticleContent,
         url: str,
         section: str,
@@ -33,8 +38,11 @@ class ArticlePersistenceService(Protocol):
         """
         Store an article with its classifications in a single transaction.
 
+        The caller must provide a database connection, but this method manages
+        the transaction to ensure article and classifications are stored atomically.
+
         Args:
-            db_config: Database configuration for connection pool
+            conn: Database connection (caller manages lifecycle)
             extracted: Extracted article content from ArticleExtractionService
             url: Original article URL
             section: Article section (e.g., "news", "lead-stories")
