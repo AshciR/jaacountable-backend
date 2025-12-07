@@ -117,14 +117,14 @@ async def validate_pipeline(url: str, section: str = "news") -> None:
                 news_source_id=1,  # Jamaica Gleaner
             )
 
-            if result["stored"]:
-                logger.info(f"  ✓ Article stored with ID: {result['article_id']}")
-                logger.info(f"  ✓ Stored {result['classification_count']} classifications")
+            if result.stored:
+                logger.info(f"  ✓ Article stored with ID: {result.article_id}")
+                logger.info(f"  ✓ Stored {result.classification_count} classifications")
 
                 logger.info("\n=== VALIDATION COMPLETE ===")
-                logger.info(f"Article ID: {result['article_id']}")
-                logger.info(f"Title: {result['article'].title}")
-                logger.info(f"Relevant classifications: {result['classification_count']}")
+                logger.info(f"Article ID: {result.article_id}")
+                logger.info(f"Title: {result.article.title}")  # type: ignore
+                logger.info(f"Relevant classifications: {result.classification_count}")
                 logger.info("✓ Pipeline integration successful!")
             else:
                 logger.info("  ⚠ Article already exists in database (duplicate URL)")

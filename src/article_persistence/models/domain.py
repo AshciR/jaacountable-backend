@@ -111,3 +111,27 @@ class NewsSource(BaseModel):
         if v < 0:
             raise ValueError('Crawl delay must be non-negative')
         return v
+
+
+class ArticleStorageResult(BaseModel):
+    """
+    Result of storing an article with classifications.
+
+    This model represents the outcome of a store operation,
+    including whether the article was stored or already existed,
+    and metadata about the storage operation.
+
+    Attributes:
+        stored: True if article was newly stored, False if duplicate
+        article_id: Database ID of stored article, None if duplicate
+        classification_count: Number of classifications stored with article
+        article: Full Article model if stored, None if duplicate
+        classifications: List of Classification models stored with article
+    """
+    stored: bool
+    article_id: int | None
+    classification_count: int
+    article: Article | None
+    classifications: list[Classification]
+
+    model_config = ConfigDict(from_attributes=True)
