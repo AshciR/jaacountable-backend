@@ -66,13 +66,15 @@ class PostgresArticlePersistenceService:
             extracted: Extracted article content from ArticleExtractionService
             url: Original article URL
             section: Article section (e.g., "news", "lead-stories")
-            relevant_classifications: List of relevant classification results
+            relevant_classifications: List of relevant classification results.
+                Must contain at least one classification.
             news_source_id: Database ID of news source (default: 1 for Jamaica Gleaner)
 
         Returns:
             ArticleStorageResult with storage outcome and metadata
 
         Raises:
+            ValueError: If relevant_classifications is empty
             UniqueViolationError: If article URL already exists (caught internally)
             Exception: For other database errors
 
@@ -87,6 +89,14 @@ class PostgresArticlePersistenceService:
             ...         relevant_classifications=results,
             ...     )
         """
+        # Validate that at least one classification is provided
+        if not relevant_classifications:
+            raise ValueError(
+                "Cannot store article without classifications. "
+                "At least one relevant classification is required. "
+                "Article relevance should be determined before calling this method."
+            )
+
         # Convert to Article domain model
         article = extracted_content_to_article(
             extracted=extracted,

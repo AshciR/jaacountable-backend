@@ -102,32 +102,6 @@ class TestStoreArticleWithClassificationsHappyPath:
         assert result.classifications[0].classifier_type == "CORRUPTION"
         assert result.classifications[1].classifier_type == "HURRICANE_RELIEF"
 
-    async def test_store_article_with_zero_classifications_succeeds(
-        self,
-        service: PostgresArticlePersistenceService,
-        db_connection: asyncpg.Connection,
-        sample_extracted_content: ExtractedArticleContent,
-    ):
-        # Given: Article with no classifications
-        url = "https://jamaica-gleaner.com/article/news/test-no-class"
-        section = "news"
-
-        # When: Storing article with empty classifications list
-        result = await service.store_article_with_classifications(
-            conn=db_connection,
-            extracted=sample_extracted_content,
-            url=url,
-            section=section,
-            relevant_classifications=[],
-            news_source_id=1,
-        )
-
-        # Then: Article is stored without classifications
-        assert result.stored is True
-        assert result.article_id is not None
-        assert result.classification_count == 0
-        assert result.classifications == []
-
 
 class TestStoreArticleWithClassificationsDuplicates:
     """Tests for duplicate article handling."""
@@ -210,6 +184,31 @@ class TestStoreArticleWithClassificationsDuplicates:
         # Then: Duplicate not stored, original classification count unchanged
         assert duplicate_result.stored is False
         assert first_result.classification_count == 1  # Original unchanged
+
+
+class TestStoreArticleWithClassificationsValidation:
+    """Tests for validation rules."""
+
+    async def test_store_article_with_zero_classifications_raises_value_error(
+        self,
+        service: PostgresArticlePersistenceService,
+        db_connection: asyncpg.Connection,
+        sample_extracted_content: ExtractedArticleContent,
+    ):
+        # Given: Article with no classifications
+        url = "https://jamaica-gleaner.com/article/news/test-no-class"
+        section = "news"
+
+        # When/Then: Storing article with empty classifications list raises ValueError
+        with pytest.raises(ValueError, match="Cannot store article without classifications"):
+            await service.store_article_with_classifications(
+                conn=db_connection,
+                extracted=sample_extracted_content,
+                url=url,
+                section=section,
+                relevant_classifications=[],
+                news_source_id=1,
+            )
 
 
 class TestStoreArticleWithClassificationsEdgeCases:
