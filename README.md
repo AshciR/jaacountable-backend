@@ -274,7 +274,7 @@ uv run pytest tests/ -v --log-cli-level=INFO
 
 **Run a specific test file:**
 ```bash
-uv run pytest tests/services/article_classification/test_corruption_adapter.py -v
+uv run pytest tests/services/article_classification/test_corruption_classifier.py -v
 ```
 
 **Run a specific test class:**
