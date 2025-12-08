@@ -18,16 +18,16 @@ class TestCorruptionAdapterHappyPath:
     """Test successful classification scenarios."""
 
     async def test_classify_corruption_article_returns_relevant(
-        self, sample_article: ClassificationInput, mock_runner: AsyncMock, mock_session_service: AsyncMock
+        self, sample_corruption_article: ClassificationInput, mock_runner: AsyncMock, mock_session_service: AsyncMock
     ):
         # Given: Adapter with mocked dependencies
-        adapter = CorruptionClassifier(
+        classifier = CorruptionClassifier(
             runner=mock_runner,
             session_service=mock_session_service,
         )
 
         # When: Classifying an article
-        result = await adapter.classify(sample_article)
+        result = await classifier.classify(sample_corruption_article)
 
         # Then: Returns ClassificationResult with expected values
         assert isinstance(result, ClassificationResult)
@@ -36,16 +36,16 @@ class TestCorruptionAdapterHappyPath:
         assert result.classifier_type == ClassifierType.CORRUPTION
 
     async def test_classify_creates_new_session(
-        self, sample_article: ClassificationInput, mock_runner: AsyncMock, mock_session_service: AsyncMock
+        self, sample_corruption_article: ClassificationInput, mock_runner: AsyncMock, mock_session_service: AsyncMock
     ):
         # Given: Adapter with mocked session service
-        adapter = CorruptionClassifier(
+        classifier = CorruptionClassifier(
             runner=mock_runner,
             session_service=mock_session_service,
         )
 
         # When: Classifying an article
-        await adapter.classify(sample_article)
+        await classifier.classify(sample_corruption_article)
 
         # Then: Session service creates new session
         mock_session_service.create_session.assert_called_once_with(
@@ -54,16 +54,16 @@ class TestCorruptionAdapterHappyPath:
         )
 
     async def test_classify_calls_runner_with_correct_params(
-        self, sample_article: ClassificationInput, mock_runner: AsyncMock, mock_session_service: AsyncMock, mock_session: Mock
+        self, sample_corruption_article: ClassificationInput, mock_runner: AsyncMock, mock_session_service: AsyncMock, mock_session: Mock
     ):
         # Given: Adapter with mocked runner
-        adapter = CorruptionClassifier(
+        classifier = CorruptionClassifier(
             runner=mock_runner,
             session_service=mock_session_service,
         )
 
         # When: Classifying an article
-        await adapter.classify(sample_article)
+        await classifier.classify(sample_corruption_article)
 
         # Then: Runner.run_async called with session context
         mock_runner.run_async.assert_called_once()
@@ -75,18 +75,18 @@ class TestCorruptionAdapterHappyPath:
 class TestCorruptionAdapterPromptBuilding:
     """Test _build_prompt() method."""
 
-    async def test_build_prompt_includes_all_article_fields(self, sample_article: ClassificationInput):
+    async def test_build_prompt_includes_all_article_fields(self, sample_corruption_article: ClassificationInput):
         # Given: Adapter instance
-        adapter = CorruptionClassifier()
+        classifier = CorruptionClassifier()
 
         # When: Building prompt
-        prompt = adapter._build_prompt(sample_article)
+        prompt = classifier._build_prompt(sample_corruption_article)
 
         # Then: Prompt includes all article fields
-        assert sample_article.title in prompt
-        assert sample_article.url in prompt
-        assert sample_article.section in prompt
-        assert sample_article.full_text in prompt
+        assert sample_corruption_article.title in prompt
+        assert sample_corruption_article.url in prompt
+        assert sample_corruption_article.section in prompt
+        assert sample_corruption_article.full_text in prompt
 
     async def test_build_prompt_with_none_published_date(self):
         # Given: Article without published_date
@@ -97,20 +97,20 @@ class TestCorruptionAdapterPromptBuilding:
             full_text="A" * 60,
             published_date=None,
         )
-        adapter = CorruptionClassifier()
+        classifier = CorruptionClassifier()
 
         # When: Building prompt
-        prompt = adapter._build_prompt(article)
+        prompt = classifier._build_prompt(article)
 
         # Then: Prompt shows 'Unknown' for date
         assert "Unknown" in prompt
 
-    async def test_build_prompt_includes_json_instruction(self, sample_article: ClassificationInput):
+    async def test_build_prompt_includes_json_instruction(self, sample_corruption_article: ClassificationInput):
         # Given: Adapter instance
-        adapter = CorruptionClassifier()
+        classifier = CorruptionClassifier()
 
         # When: Building prompt
-        prompt = adapter._build_prompt(sample_article)
+        prompt = classifier._build_prompt(sample_corruption_article)
 
         # Then: Prompt asks for JSON response
         assert "JSON" in prompt or "json" in prompt
@@ -124,11 +124,11 @@ class TestCorruptionAdapterEventProcessing:
         self, mock_runner: AsyncMock, mock_session: Mock
     ):
         # Given: Adapter with mocked runner
-        adapter = CorruptionClassifier(runner=mock_runner)
+        classifier = CorruptionClassifier(runner=mock_runner)
         prompt = "Test prompt"
 
         # When: Calling agent async
-        response = await adapter._call_agent_async(
+        response = await classifier._call_agent_async(
             prompt, mock_runner, mock_session.user_id, mock_session.id
         )
 
@@ -152,10 +152,10 @@ class TestCorruptionAdapterEventProcessing:
 
         runner.run_async = Mock(side_effect=lambda **kwargs: error_generator())
 
-        adapter = CorruptionClassifier(runner=runner)
+        classifier = CorruptionClassifier(runner=runner)
 
         # When: Calling agent async
-        response = await adapter._call_agent_async(
+        response = await classifier._call_agent_async(
             "test", runner, mock_session.user_id, mock_session.id
         )
 
@@ -185,10 +185,10 @@ class TestCorruptionAdapterEventProcessing:
 
         runner.run_async = Mock(side_effect=lambda **kwargs: multi_event_generator())
 
-        adapter = CorruptionClassifier(runner=runner)
+        classifier = CorruptionClassifier(runner=runner)
 
         # When: Calling agent async
-        response = await adapter._call_agent_async(
+        response = await classifier._call_agent_async(
             "test", runner, mock_session.user_id, mock_session.id
         )
 
@@ -200,23 +200,23 @@ class TestCorruptionAdapterJsonParsing:
     """Test JSON response parsing."""
 
     async def test_classify_parses_valid_json(
-        self, sample_article: ClassificationInput, mock_runner: AsyncMock, mock_session_service: AsyncMock
+        self, sample_corruption_article: ClassificationInput, mock_runner: AsyncMock, mock_session_service: AsyncMock
     ):
         # Given: Adapter with valid JSON response
-        adapter = CorruptionClassifier(
+        classifier = CorruptionClassifier(
             runner=mock_runner,
             session_service=mock_session_service,
         )
 
         # When: Classifying article
-        result = await adapter.classify(sample_article)
+        result = await classifier.classify(sample_corruption_article)
 
         # Then: Result is properly parsed ClassificationResult
         assert isinstance(result, ClassificationResult)
         assert result.model_name == "gpt-5-nano"
 
     async def test_classify_raises_on_invalid_json(
-        self, sample_article: ClassificationInput, mock_session_service: AsyncMock
+        self, sample_corruption_article: ClassificationInput, mock_session_service: AsyncMock
     ):
         # Given: Runner returning invalid JSON
         bad_event = Mock()
@@ -231,17 +231,17 @@ class TestCorruptionAdapterJsonParsing:
 
         runner.run_async = Mock(side_effect=lambda **kwargs: bad_json_generator())
 
-        adapter = CorruptionClassifier(
+        classifier = CorruptionClassifier(
             runner=runner,
             session_service=mock_session_service,
         )
 
         # When/Then: Raises validation error
         with pytest.raises(Exception):  # JSONDecodeError or ValidationError
-            await adapter.classify(sample_article)
+            await classifier.classify(sample_corruption_article)
 
     async def test_classify_raises_on_missing_required_fields(
-        self, sample_article: ClassificationInput, mock_session_service: AsyncMock
+        self, sample_corruption_article: ClassificationInput, mock_session_service: AsyncMock
     ):
         # Given: Runner returning JSON without required fields
         incomplete_event = Mock()
@@ -256,21 +256,21 @@ class TestCorruptionAdapterJsonParsing:
 
         runner.run_async = Mock(side_effect=lambda **kwargs: incomplete_generator())
 
-        adapter = CorruptionClassifier(
+        classifier = CorruptionClassifier(
             runner=runner,
             session_service=mock_session_service,
         )
 
         # When/Then: Raises ValidationError
         with pytest.raises(Exception):  # Pydantic ValidationError
-            await adapter.classify(sample_article)
+            await classifier.classify(sample_corruption_article)
 
 
 class TestCorruptionAdapterErrorHandling:
     """Test error scenarios and edge cases."""
 
     async def test_classify_handles_session_creation_failure(
-        self, sample_article: ClassificationInput, mock_runner: AsyncMock
+        self, sample_corruption_article: ClassificationInput, mock_runner: AsyncMock
     ):
         # Given: Session service that raises exception
         failing_service = AsyncMock()
@@ -278,17 +278,17 @@ class TestCorruptionAdapterErrorHandling:
             side_effect=Exception("Session creation failed")
         )
 
-        adapter = CorruptionClassifier(
+        classifier = CorruptionClassifier(
             runner=mock_runner,
             session_service=failing_service,
         )
 
         # When/Then: Exception propagates
         with pytest.raises(Exception, match="Session creation failed"):
-            await adapter.classify(sample_article)
+            await classifier.classify(sample_corruption_article)
 
     async def test_classify_handles_runner_exception(
-        self, sample_article: ClassificationInput, mock_session_service: AsyncMock
+        self, sample_corruption_article: ClassificationInput, mock_session_service: AsyncMock
     ):
         # Given: Runner that raises exception
         failing_runner = AsyncMock()
@@ -299,14 +299,14 @@ class TestCorruptionAdapterErrorHandling:
 
         failing_runner.run_async = Mock(side_effect=lambda **kwargs: failing_generator())
 
-        adapter = CorruptionClassifier(
+        classifier = CorruptionClassifier(
             runner=failing_runner,
             session_service=mock_session_service,
         )
 
         # When/Then: Exception propagates
         with pytest.raises(Exception, match="Runner failed"):
-            await adapter.classify(sample_article)
+            await classifier.classify(sample_corruption_article)
 
     async def test_call_agent_returns_default_when_no_final_response(
         self, mock_session: Mock
@@ -322,27 +322,15 @@ class TestCorruptionAdapterErrorHandling:
 
         runner.run_async = Mock(side_effect=lambda **kwargs: no_final_generator())
 
-        adapter = CorruptionClassifier(runner=runner)
+        classifier = CorruptionClassifier(runner=runner)
 
         # When: Calling agent async
-        response = await adapter._call_agent_async(
+        response = await classifier._call_agent_async(
             "test", runner, mock_session.user_id, mock_session.id
         )
 
         # Then: Returns default message
         assert "did not produce" in response.lower() or "no" in response.lower()
-
-
-@pytest.fixture
-def sample_article() -> ClassificationInput:
-    """Sample article for testing."""
-    return ClassificationInput(
-        url="https://jamaica-gleaner.com/article/news/test",
-        title="Test Article About OCG Investigation",
-        section="news",
-        full_text="The Office of the Contractor General has launched an investigation into alleged contract irregularities involving $50 million in procurement contracts at the Ministry of Education.",
-        published_date=datetime.now(timezone.utc),
-    )
 
 
 @pytest.fixture

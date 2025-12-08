@@ -17,7 +17,7 @@ from src.article_classification.agents.corruption_classifier import (
 
 
 @pytest.fixture
-def adapter() -> CorruptionClassifier:
+def classifier() -> CorruptionClassifier:
     """Create real adapter instance (makes actual LLM calls)."""
     return CorruptionClassifier()
 
@@ -46,11 +46,11 @@ class TestCorruptionClassifierIntegration:
 
     @pytest.mark.integration
     async def test_classifies_ocg_investigation_as_relevant(
-        self, adapter: CorruptionClassifier, ocg_investigation_article: ClassificationInput
+        self, classifier: CorruptionClassifier, ocg_investigation_article: ClassificationInput
     ):
         # Given: Article about OCG investigation into government contracts
         # When: Classifying the article
-        result = await adapter.classify(ocg_investigation_article)
+        result = await classifier.classify(ocg_investigation_article)
 
         # Then: Article is classified as relevant to corruption
         assert isinstance(result, ClassificationResult)

@@ -1,8 +1,11 @@
 """Classification service that orchestrates article classification."""
 import asyncio
+import logging
 
 from .base import ArticleClassifier
 from .models import ClassificationInput, ClassificationResult
+
+logger = logging.getLogger(__name__)
 
 
 class ClassificationService:
@@ -77,12 +80,15 @@ class ClassificationService:
             return_exceptions=True,
         )
 
-        # Filter out exceptions (but log them)
+        # Filter out exceptions and log them
         classified_results = []
-        for result in results:
+        for i, result in enumerate(results):
             if isinstance(result, Exception):
-                # TODO: Add proper logging
-                # For now, just skip failed classifiers
+                # Log classifier failure with details
+                classifier_name = self.classifiers[i].__class__.__name__
+                logger.warning(
+                    f"Classifier {classifier_name} failed for article {article.url}: {type(result).__name__}: {result}"
+                )
                 continue
             classified_results.append(result)
 
