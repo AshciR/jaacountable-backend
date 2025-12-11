@@ -11,5 +11,5 @@ def fixtures_dir() -> Path:
 
 @pytest.fixture
 def gleaner_html(fixtures_dir: Path) -> str:
-    """Load Gleaner article HTML fixture."""
+    """Load Gleaner article HTML fixture with JSON-LD structure."""
     return (fixtures_dir / "gleaner_article.html").read_text(encoding="utf-8")

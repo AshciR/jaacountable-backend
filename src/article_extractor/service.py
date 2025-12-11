@@ -17,7 +17,7 @@ class ArticleExtractionService:
     4. Returns structured ArticleContent
 
     Supported domains (Phase 1):
-    - jamaica-gleaner.com (via GleanerExtractor)
+    - jamaica-gleaner.com (via GleanerExtractor - updated December 2025)
 
     Example:
         service = ArticleExtractionService()

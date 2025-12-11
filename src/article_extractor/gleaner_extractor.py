@@ -1,4 +1,5 @@
 """Article extractor for Jamaica Gleaner news source."""
+import json
 from datetime import datetime, timezone
 from bs4 import BeautifulSoup
 
@@ -7,44 +8,49 @@ from .models import ExtractedArticleContent
 
 class GleanerExtractor:
     """
-    Extraction strategy for Jamaica Gleaner articles.
+    Extraction strategy for Jamaica Gleaner articles (December 2025).
 
     Implements ArticleExtractor Protocol for jamaica-gleaner.com.
 
-    HTML Structure (validated 2025-11-28):
-    - Article title: <h1 class="title">
-    - Article content: <div class="article-content"> with <p> tags
-    - Author: <a class="author-term">
-    - Published date: <meta property="article:published_time"> (ISO 8601 format)
+    Uses hybrid parsing approach:
+    1. JSON-LD structured data for metadata (title, author, date) - more stable
+    2. CSS selectors for article body text (JSON-LD doesn't include full text)
+    3. Fallback to legacy CSS selectors for backward compatibility
+
+    HTML Structure (validated 2025-12-10):
+    - JSON-LD: <script type="application/ld+json"> with Schema.org Article
+    - Article title: headline field in JSON-LD (fallback: h1.article--title, h1.title, any h1)
+    - Article content: <div class="article--body"> with <p> tags (fallback: article-content, field-name-body)
+    - Author: author.name field in JSON-LD (fallback: div.article--authors, a.author-term)
+    - Published date: datePublished field in JSON-LD (fallback: meta[article:published_time], time[datetime])
     """
 
     def extract(self, html: str, url: str) -> ExtractedArticleContent:
         """
-        Extract article content from Gleaner HTML.
+        Extract article content from Gleaner HTML using hybrid JSON-LD + CSS parsing.
 
         Args:
             html: Raw HTML content
             url: Article URL (for error context)
 
         Returns:
-            ArticleContent with extracted data
+            ExtractedArticleContent with extracted data
 
         Raises:
             ValueError: If required elements (title, full_text) are missing
         """
         soup = BeautifulSoup(html, "lxml")
 
-        # Extract title (required)
-        title = self._extract_title(soup, url)
+        # Extract JSON-LD structured data (if available)
+        json_ld = self._extract_json_ld(soup)
 
-        # Extract full text (required)
+        # Extract required fields (fail-fast if missing)
+        title = self._extract_title(soup, json_ld, url)
         full_text = self._extract_full_text(soup, url)
 
-        # Extract author (optional)
-        author = self._extract_author(soup)
-
-        # Extract published date (optional)
-        published_date = self._extract_published_date(soup)
+        # Extract optional fields (return None if missing)
+        author = self._extract_author(soup, json_ld)
+        published_date = self._extract_published_date(soup, json_ld)
 
         return ExtractedArticleContent(
             title=title,
@@ -53,32 +59,112 @@ class GleanerExtractor:
             published_date=published_date,
         )
 
-    def _extract_title(self, soup: BeautifulSoup, url: str) -> str:
-        """Extract article title."""
-        # Primary selector: h1 with class="title"
-        title_tag = soup.find("h1", class_="title")
+    def _extract_json_ld(self, soup: BeautifulSoup) -> dict | None:
+        """
+        Extract and parse JSON-LD structured data from HTML.
 
+        Args:
+            soup: BeautifulSoup parsed HTML
+
+        Returns:
+            Parsed JSON-LD dict if found and valid, None otherwise
+        """
+        # Find all script tags with type="application/ld+json"
+        json_ld_scripts = soup.find_all("script", type="application/ld+json")
+
+        for script in json_ld_scripts:
+            try:
+                data = json.loads(script.string)
+                # Look for Article type (could be multiple JSON-LD blocks)
+                if isinstance(data, dict) and data.get("@type") == "Article":
+                    return data
+            except (json.JSONDecodeError, TypeError, AttributeError):
+                # Malformed JSON or missing content - continue to next script tag
+                continue
+
+        return None
+
+    def _extract_title(self, soup: BeautifulSoup, json_ld: dict | None, url: str) -> str:
+        """
+        Extract article title with priority fallback chain.
+
+        Priority:
+        1. JSON-LD headline field (most reliable)
+        2. h1.article--title (new site structure)
+        3. h1.title (legacy site structure)
+        4. Any h1 tag (last resort)
+
+        Args:
+            soup: BeautifulSoup parsed HTML
+            json_ld: Parsed JSON-LD data (or None)
+            url: Article URL for error context
+
+        Returns:
+            Article title string
+
+        Raises:
+            ValueError: If title cannot be extracted from any source
+        """
+        # Priority 1: JSON-LD headline
+        if json_ld and "headline" in json_ld:
+            headline = json_ld["headline"]
+            if isinstance(headline, str) and headline.strip():
+                return headline.strip()
+
+        # Priority 2: h1 with class="article--title" (new site)
+        title_tag = soup.find("h1", class_="article--title")
         if title_tag:
             title_text = title_tag.get_text(strip=True)
             if title_text:
                 return title_text
 
-        # Fallback: try any h1
+        # Priority 3: h1 with class="title" (legacy)
+        title_tag = soup.find("h1", class_="title")
+        if title_tag:
+            title_text = title_tag.get_text(strip=True)
+            if title_text:
+                return title_text
+
+        # Priority 4: Any h1 tag (last resort)
         h1_tag = soup.find("h1")
         if h1_tag:
             title_text = h1_tag.get_text(strip=True)
             if title_text:
                 return title_text
 
-        # If no title found, raise error (fail-fast)
+        # If no title found from any source, raise error (fail-fast)
         raise ValueError(f"Could not extract title from article: {url}")
 
     def _extract_full_text(self, soup: BeautifulSoup, url: str) -> str:
-        """Extract article body paragraphs."""
-        # Primary selector: div with class="article-content"
-        content_container = soup.find("div", class_="article-content")
+        """
+        Extract article body paragraphs with priority fallback chain.
 
-        # Fallback: try field-name-body
+        Priority:
+        1. div.article--body (new site structure)
+        2. div.article-content (legacy site structure)
+        3. div.field-name-body (older legacy structure)
+
+        Args:
+            soup: BeautifulSoup parsed HTML
+            url: Article URL for error context
+
+        Returns:
+            Full article text as string
+
+        Raises:
+            ValueError: If article body cannot be extracted or is too short
+        """
+        # Try selectors in priority order
+        content_container = None
+
+        # Priority 1: div.article--body (new site)
+        content_container = soup.find("div", class_="article--body")
+
+        # Priority 2: div.article-content (legacy)
+        if not content_container:
+            content_container = soup.find("div", class_="article-content")
+
+        # Priority 3: div.field-name-body (older legacy)
         if not content_container:
             content_container = soup.find("div", class_="field-name-body")
 
@@ -107,58 +193,130 @@ class GleanerExtractor:
 
         return full_text
 
-    def _extract_author(self, soup: BeautifulSoup) -> str | None:
-        """Extract author name (optional)."""
-        # Primary selector: a tag with class="author-term"
-        author_link = soup.find("a", class_="author-term")
+    def _extract_author(self, soup: BeautifulSoup, json_ld: dict | None) -> str | None:
+        """
+        Extract author name with priority fallback chain (optional field).
 
+        Priority:
+        1. JSON-LD author.name field (most reliable)
+        2. div.article--authors (new site structure)
+        3. a.author-term (legacy site structure)
+
+        Args:
+            soup: BeautifulSoup parsed HTML
+            json_ld: Parsed JSON-LD data (or None)
+
+        Returns:
+            Author name string or None if not found
+        """
+        # Priority 1: JSON-LD author.name
+        if json_ld and "author" in json_ld:
+            author_obj = json_ld["author"]
+            if isinstance(author_obj, dict) and author_obj.get("@type") == "Person":
+                author_name = author_obj.get("name")
+                if isinstance(author_name, str) and author_name.strip():
+                    return self._clean_author_name(author_name.strip())
+
+        # Priority 2: div.article--authors (new site)
+        author_div = soup.find("div", class_="article--authors")
+        if author_div:
+            author_text = author_div.get_text(strip=True)
+            if author_text:
+                return self._clean_author_name(author_text)
+
+        # Priority 3: a.author-term (legacy)
+        author_link = soup.find("a", class_="author-term")
         if author_link:
             author_text = author_link.get_text(strip=True)
             if author_text:
-                # Clean up common patterns like "By " prefix or "/Staff Reporter" suffix
-                author_text = author_text.replace("By ", "").replace("by ", "")
-                # Remove "/Staff Reporter" suffix if present
-                if "/Staff Reporter" in author_text:
-                    author_text = author_text.split("/")[0].strip()
-                return author_text
+                return self._clean_author_name(author_text)
 
         return None
 
-    def _extract_published_date(self, soup: BeautifulSoup) -> datetime | None:
-        """Extract published date (optional)."""
-        # Primary selector: meta tag with property="article:published_time"
-        meta_date = soup.find("meta", property="article:published_time")
+    def _extract_published_date(self, soup: BeautifulSoup, json_ld: dict | None) -> datetime | None:
+        """
+        Extract published date with priority fallback chain (optional field).
 
+        Priority:
+        1. JSON-LD datePublished field (most reliable)
+        2. meta[property="article:published_time"] (legacy)
+        3. time[datetime] tag (older legacy)
+
+        Args:
+            soup: BeautifulSoup parsed HTML
+            json_ld: Parsed JSON-LD data (or None)
+
+        Returns:
+            Timezone-aware datetime in UTC or None if not found
+        """
+        # Priority 1: JSON-LD datePublished
+        if json_ld and "datePublished" in json_ld:
+            date_str = json_ld["datePublished"]
+            if isinstance(date_str, str):
+                parsed_date = self._parse_and_normalize_date(date_str)
+                if parsed_date:
+                    return parsed_date
+
+        # Priority 2: meta tag with property="article:published_time"
+        meta_date = soup.find("meta", property="article:published_time")
         if meta_date:
             content = meta_date.get("content")
             if content:
-                try:
-                    # Parse ISO 8601 format datetime
-                    dt = datetime.fromisoformat(content)
-                    # Ensure timezone-aware (convert to UTC)
-                    if dt.tzinfo is None:
-                        dt = dt.replace(tzinfo=timezone.utc)
-                    else:
-                        # Convert to UTC for consistency
-                        dt = dt.astimezone(timezone.utc)
-                    return dt
-                except (ValueError, TypeError) as e:
-                    # If parsing fails, return None (date is optional)
-                    pass
+                parsed_date = self._parse_and_normalize_date(content)
+                if parsed_date:
+                    return parsed_date
 
-        # Fallback: try time tag with datetime attribute
+        # Priority 3: time tag with datetime attribute
         time_tag = soup.find("time")
         if time_tag:
             datetime_attr = time_tag.get("datetime")
             if datetime_attr:
-                try:
-                    dt = datetime.fromisoformat(datetime_attr)
-                    if dt.tzinfo is None:
-                        dt = dt.replace(tzinfo=timezone.utc)
-                    else:
-                        dt = dt.astimezone(timezone.utc)
-                    return dt
-                except (ValueError, TypeError):
-                    pass
+                parsed_date = self._parse_and_normalize_date(datetime_attr)
+                if parsed_date:
+                    return parsed_date
 
         return None
+
+    def _clean_author_name(self, author_text: str) -> str:
+        """
+        Clean up author name by removing common prefixes and suffixes.
+
+        Removes:
+        - "By " / "by " prefix
+        - "/Staff Reporter" suffix
+        - "/Senior Staff Reporter" suffix
+        - "/Gleaner Writer" suffix (and other variants)
+
+        Args:
+            author_text: Raw author name string
+
+        Returns:
+            Cleaned author name string
+        """
+        author_text = author_text.replace("By ", "").replace("by ", "")
+        # Remove all variants of "/Staff Reporter" and similar suffixes
+        # Split on "/" and take only the first part (the actual name)
+        if "/" in author_text:
+            author_text = author_text.split("/")[0].strip()
+        return author_text
+
+    def _parse_and_normalize_date(self, date_str: str) -> datetime | None:
+        """
+        Parse ISO 8601 date string and normalize to timezone-aware UTC datetime.
+
+        Args:
+            date_str: ISO 8601 formatted date string
+
+        Returns:
+            Timezone-aware datetime in UTC or None if parsing fails
+        """
+        try:
+            dt = datetime.fromisoformat(date_str)
+            # Ensure timezone-aware (convert to UTC)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            return dt
+        except (ValueError, TypeError):
+            return None

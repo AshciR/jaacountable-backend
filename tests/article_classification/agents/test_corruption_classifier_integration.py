@@ -44,6 +44,7 @@ def ocg_investigation_article() -> ClassificationInput:
 class TestCorruptionClassifierIntegration:
     """Integration tests that make actual LLM API calls."""
 
+    @pytest.mark.external
     @pytest.mark.integration
     async def test_classifies_ocg_investigation_as_relevant(
         self, classifier: CorruptionClassifier, ocg_investigation_article: ClassificationInput
