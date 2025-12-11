@@ -16,6 +16,7 @@ from src.article_persistence.models.domain import ArticleStorageResult
 class TestProcessArticleIntegrationHappyPath:
     """Integration tests for happy path scenarios with real LLM + database."""
 
+    @pytest.mark.external
     @pytest.mark.integration
     async def test_process_relevant_article_full_pipeline_succeeds(
         self,

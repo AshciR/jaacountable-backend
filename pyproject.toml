@@ -32,5 +32,7 @@ asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 markers = [
     "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+    "contract: marks tests that validate external service contracts (make live HTTP requests)",
+    "external: marks tests that make external calls (integration + contract tests)",
 ]
 
