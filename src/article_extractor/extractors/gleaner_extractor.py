@@ -1,7 +1,7 @@
 """Article extractor for Jamaica Gleaner with automatic fallback strategy."""
 import logging
 
-from .models import ExtractedArticleContent
+from src.article_extractor.models import ExtractedArticleContent
 from .gleaner_extractor_v1 import GleanerExtractorV1
 from .gleaner_extractor_v2 import GleanerExtractorV2
 

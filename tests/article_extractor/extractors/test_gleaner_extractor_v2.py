@@ -1,8 +1,8 @@
 """Tests for GleanerExtractorV2 (JSON-LD + CSS hybrid strategy)."""
 import pytest
-from datetime import datetime, timezone
+from datetime import timezone
 
-from src.article_extractor.gleaner_extractor_v2 import GleanerExtractorV2
+from src.article_extractor.extractors.gleaner_extractor_v2 import GleanerExtractorV2
 from src.article_extractor.models import ExtractedArticleContent
 
 

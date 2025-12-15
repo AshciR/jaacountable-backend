@@ -1,8 +1,8 @@
 """Tests for GleanerExtractorV1 (CSS-only strategy)."""
 import pytest
-from datetime import datetime, timezone
+from datetime import timezone
 
-from src.article_extractor.gleaner_extractor_v1 import GleanerExtractorV1
+from src.article_extractor.extractors.gleaner_extractor_v1 import GleanerExtractorV1
 from src.article_extractor.models import ExtractedArticleContent
 
 
