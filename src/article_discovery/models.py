@@ -1,6 +1,24 @@
 """Article discovery models."""
+from dataclasses import dataclass
 from datetime import datetime
 from pydantic import BaseModel, field_validator, ConfigDict
+
+
+@dataclass
+class RssFeedConfig:
+    """
+    Configuration for a single RSS feed.
+
+    Used to configure RSS feed discoverers with multiple feeds,
+    where each feed maps to a different section.
+
+    Attributes:
+        url: RSS feed URL
+        section: Section name to assign to discovered articles from this feed
+    """
+
+    url: str
+    section: str
 
 
 class DiscoveredArticle(BaseModel):
