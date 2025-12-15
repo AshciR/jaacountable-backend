@@ -13,7 +13,7 @@ Run with: uv run pytest tests/article_extractor/test_gleaner_extractor_contract.
 import pytest
 import requests
 
-from src.article_extractor.gleaner_extractor import GleanerExtractor
+from src.article_extractor.extractors.gleaner_extractor import GleanerExtractor
 
 
 class TestGleanerExtractorExternalContract:

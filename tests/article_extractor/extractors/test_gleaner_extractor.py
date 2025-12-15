@@ -3,8 +3,7 @@ import pytest
 from unittest.mock import patch
 from datetime import timezone
 
-from src.article_extractor.gleaner_extractor import GleanerExtractor
-from src.article_extractor.models import ExtractedArticleContent
+from src.article_extractor.extractors.gleaner_extractor import GleanerExtractor
 
 
 class TestGleanerExtractorFallbackLogic:

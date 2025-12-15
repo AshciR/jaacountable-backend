@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timezone
 from bs4 import BeautifulSoup
 
-from .models import ExtractedArticleContent
+from src.article_extractor.models import ExtractedArticleContent
 
 
 class GleanerExtractorV2:

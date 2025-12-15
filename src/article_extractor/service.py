@@ -3,7 +3,7 @@ import requests
 from urllib.parse import urlparse
 
 from .models import ExtractedArticleContent
-from .gleaner_extractor import GleanerExtractor
+from src.article_extractor.extractors.gleaner_extractor import GleanerExtractor
 
 
 class ArticleExtractionService:
