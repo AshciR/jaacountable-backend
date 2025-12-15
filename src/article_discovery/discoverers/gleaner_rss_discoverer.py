@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 import feedparser
 import requests
-from src.article_discovery.models import DiscoveredArticle
+from src.article_discovery.models import DiscoveredArticle, RssFeedConfig
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +23,7 @@ class GleanerRssFeedDiscoverer:
 
     def __init__(
         self,
-        feed_url: str = "https://jamaica-gleaner.com/feed/rss.xml",
-        section: str = "lead-stories",
+        feed_configs: list[RssFeedConfig],
         timeout: int = 30,
         max_retries: int = 3,
         base_backoff: float = 2.0,
@@ -33,35 +32,34 @@ class GleanerRssFeedDiscoverer:
         Initialize the RSS discoverer.
 
         Args:
-            feed_url: RSS feed URL
-            section: Section name to assign to discovered articles
+            feed_configs: List of RSS feed configurations
             timeout: Request timeout in seconds
             max_retries: Maximum number of retry attempts for network failures
             base_backoff: Base backoff time in seconds (exponential: 2s, 4s, 8s)
         """
-        self.feed_url = feed_url
-        self.section = section
+        self.feed_configs = feed_configs
         self.timeout = timeout
         self.max_retries = max_retries
         self.base_backoff = base_backoff
+
         logger.info(
-            f"Initialized GleanerRssFeedDiscoverer: feed_url={feed_url}, "
-            f"section={section}, max_retries={max_retries}"
+            f"Initialized GleanerRssFeedDiscoverer: {len(self.feed_configs)} feed(s), "
+            f"max_retries={max_retries}"
         )
 
     async def discover(self, news_source_id: int) -> list[DiscoveredArticle]:
         """
-        Discover articles from RSS feed.
+        Discover articles from all configured RSS feeds.
 
         Args:
             news_source_id: Database ID of the news source (e.g., 1 for Jamaica Gleaner)
 
         Returns:
-            List of DiscoveredArticle instances with metadata from RSS feed
+            List of DiscoveredArticle instances with metadata from all RSS feeds,
+            deduplicated across feeds
 
         Raises:
             ValueError: If news_source_id is invalid
-            RuntimeError: If feed fetch/parse fails after all retries
         """
         # Validate input
         if news_source_id <= 0:
@@ -70,31 +68,41 @@ class GleanerRssFeedDiscoverer:
 
         logger.info(
             f"Starting article discovery: news_source_id={news_source_id}, "
-            f"feed_url={self.feed_url}"
+            f"{len(self.feed_configs)} feed(s)"
         )
 
-        # Fetch RSS feed with retry logic
-        response = self._fetch_feed_with_retry()
+        all_articles = []
 
-        # Parse RSS feed
-        logger.debug("Parsing RSS feed")
-        feed = feedparser.parse(response.content)
+        # Process each feed with fail-soft error handling
+        for config in self.feed_configs:
+            try:
+                logger.info(f"Processing feed: {config.url}")
+                articles: list[DiscoveredArticle] = await self._discover_from_feed(config, news_source_id)
+                all_articles.extend(articles)
+                logger.info(
+                    f"Found {len(articles)} articles from {config.url} (section: {config.section})"
+                )
+            except Exception as e:
+                # Fail-soft: log error but continue with other feeds
+                logger.error(
+                    f"Failed to process feed {config.url}: {type(e).__name__}: {e}",
+                    exc_info=True
+                )
+                continue
 
-        if feed.bozo:  # feedparser sets bozo=1 if feed has errors
-            logger.error(f"Invalid RSS feed format: {feed.bozo_exception}")
-            raise RuntimeError(f"Invalid RSS feed format: {feed.bozo_exception}")
+        if not all_articles:
+            logger.warning("No articles discovered from any feed")
+            return []
 
-        logger.info(f"RSS feed parsed successfully: {len(feed.entries)} entries found")
+        # CRITICAL: Deduplicate across ALL feeds (not per-feed)
+        deduplicated_articles = self._deduplicate_articles(all_articles)
 
-        # Parse all entries into DiscoveredArticle instances
-        discovered_articles = self._parse_all_entries(feed.entries, news_source_id)
-
-        # Deduplicate by URL (in case feed has duplicates)
-        deduplicated_articles = self._deduplicate_articles(discovered_articles)
-
-        duplicates_removed = len(discovered_articles) - len(deduplicated_articles)
+        duplicates_removed = len(all_articles) - len(deduplicated_articles)
         if duplicates_removed > 0:
-            logger.info(f"Removed {duplicates_removed} duplicate URLs from feed")
+            logger.info(
+                f"Removed {duplicates_removed} cross-feed duplicate(s) "
+                f"(total: {len(all_articles)} → unique: {len(deduplicated_articles)})"
+            )
 
         logger.info(
             f"Discovery complete: {len(deduplicated_articles)} unique articles discovered"
@@ -102,9 +110,12 @@ class GleanerRssFeedDiscoverer:
 
         return deduplicated_articles
 
-    def _fetch_feed_with_retry(self) -> requests.Response:
+    def _fetch_feed_with_retry(self, feed_url: str) -> requests.Response:
         """
         Fetch RSS feed with exponential backoff retry logic.
+
+        Args:
+            feed_url: RSS feed URL to fetch
 
         Returns:
             HTTP response object
@@ -117,10 +128,10 @@ class GleanerRssFeedDiscoverer:
         for attempt in range(1, self.max_retries + 1):
             try:
                 logger.debug(
-                    f"Fetching RSS feed from {self.feed_url} (attempt {attempt}/{self.max_retries})"
+                    f"Fetching RSS feed from {feed_url} (attempt {attempt}/{self.max_retries})"
                 )
                 response = requests.get(
-                    self.feed_url,
+                    feed_url,
                     timeout=self.timeout,
                     headers={
                         "User-Agent": "JaAccountable-Bot/1.0 (Article Discovery Service)"
@@ -148,14 +159,52 @@ class GleanerRssFeedDiscoverer:
 
         # All retries failed
         logger.error(
-            f"Failed to fetch RSS feed from {self.feed_url} after {self.max_retries} attempts"
+            f"Failed to fetch RSS feed from {feed_url} after {self.max_retries} attempts"
         )
         raise RuntimeError(
             f"Failed to fetch RSS feed after {self.max_retries} attempts: {last_exception}"
         ) from last_exception
 
+    async def _discover_from_feed(
+        self, config: RssFeedConfig, news_source_id: int
+    ) -> list[DiscoveredArticle]:
+        """
+        Discover articles from a single RSS feed.
+
+        Args:
+            config: RSS feed configuration (URL + section)
+            news_source_id: Database ID of news source
+
+        Returns:
+            List of discovered articles from this feed
+
+        Raises:
+            RuntimeError: If feed fetch/parse fails
+        """
+        # Fetch feed with retry logic
+        response = self._fetch_feed_with_retry(config.url)
+
+        # Parse RSS feed
+        logger.debug(f"Parsing RSS feed from {config.url}")
+        feed = feedparser.parse(response.content)
+
+        if feed.bozo:  # feedparser sets bozo=1 if feed has errors
+            logger.error(f"Invalid RSS feed format: {feed.bozo_exception}")
+            raise RuntimeError(f"Invalid RSS feed format: {feed.bozo_exception}")
+
+        logger.info(
+            f"RSS feed parsed successfully: {len(feed.entries)} entries found in {config.url}"
+        )
+
+        # Parse all entries into DiscoveredArticle instances
+        discovered_articles = self._parse_all_entries(
+            feed.entries, news_source_id, config.section, config.url
+        )
+
+        return discovered_articles
+
     def _parse_all_entries(
-        self, entries: list[Any], news_source_id: int
+        self, entries: list[Any], news_source_id: int, section: str, feed_url: str
     ) -> list[DiscoveredArticle]:
         """
         Parse all RSS entries into DiscoveredArticle instances.
@@ -165,6 +214,8 @@ class GleanerRssFeedDiscoverer:
         Args:
             entries: List of feedparser entry objects
             news_source_id: Database ID of news source
+            section: Section name to assign to discovered articles
+            feed_url: RSS feed URL (for logging purposes)
 
         Returns:
             List of successfully parsed DiscoveredArticle instances
@@ -174,7 +225,7 @@ class GleanerRssFeedDiscoverer:
 
         for i, entry in enumerate(entries, 1):
             try:
-                article = self._parse_rss_entry(entry, news_source_id)
+                article = self._parse_rss_entry(entry, news_source_id, section)
                 discovered_articles.append(article)
                 logger.debug(
                     f"Parsed entry {i}/{len(entries)}: {article.title or article.url}"
@@ -182,7 +233,7 @@ class GleanerRssFeedDiscoverer:
             except (KeyError, ValueError, AttributeError) as e:
                 # Log detailed information about skipped entry
                 skipped_count += 1
-                self._log_skipped_entry(entry, i, len(entries), e)
+                self._log_skipped_entry(entry, i, len(entries), e, feed_url)
                 continue
 
         if skipped_count > 0:
@@ -191,7 +242,7 @@ class GleanerRssFeedDiscoverer:
         return discovered_articles
 
     def _log_skipped_entry(
-        self, entry: Any, entry_num: int, total_entries: int, error: Exception
+        self, entry: Any, entry_num: int, total_entries: int, error: Exception, feed_url: str
     ) -> None:
         """
         Log detailed information about a skipped RSS entry.
@@ -201,6 +252,7 @@ class GleanerRssFeedDiscoverer:
             entry_num: Entry number in feed
             total_entries: Total number of entries in feed
             error: The exception that caused the skip
+            feed_url: RSS feed URL (for logging purposes)
         """
         # Extract available information from entry
         entry_url = getattr(entry, "link", "MISSING")
@@ -209,7 +261,7 @@ class GleanerRssFeedDiscoverer:
 
         # Log warning with context
         logger.warning(
-            f"Skipping malformed RSS entry {entry_num}/{total_entries} from {self.feed_url}"
+            f"Skipping malformed RSS entry {entry_num}/{total_entries} from {feed_url}"
         )
         logger.warning(f"  URL: {entry_url}")
         logger.warning(f"  Title: {entry_title}")
@@ -220,13 +272,16 @@ class GleanerRssFeedDiscoverer:
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f"  Raw entry data: {entry}")
 
-    def _parse_rss_entry(self, entry: Any, news_source_id: int) -> DiscoveredArticle:
+    def _parse_rss_entry(
+        self, entry: Any, news_source_id: int, section: str
+    ) -> DiscoveredArticle:
         """
         Parse a single RSS entry into a DiscoveredArticle.
 
         Args:
             entry: feedparser entry object
             news_source_id: Database ID of news source
+            section: Section name to assign to discovered article
 
         Returns:
             DiscoveredArticle instance
@@ -264,7 +319,7 @@ class GleanerRssFeedDiscoverer:
         return DiscoveredArticle(
             url=url,
             news_source_id=news_source_id,
-            section=self.section,  # Use parameterized section
+            section=section,
             discovered_at=discovered_at,
             title=title,
             published_date=published_date,

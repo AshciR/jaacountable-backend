@@ -11,6 +11,10 @@ This is a Python backend project called "jaacountable-backend" that implements a
 ### Core Components
 
 - **Main Entry Point**: `main.py` - Simple entry point with basic "Hello World" functionality
+- **Article Discovery**: `src/article_discovery/` - RSS-based article discovery system
+  - `discoverers/gleaner_rss_discoverer.py` - Multi-feed RSS discoverer for Jamaica Gleaner
+  - `models.py` - Discovery models (`RssFeedConfig`, `DiscoveredArticle`)
+  - `base.py` - Protocol definition for article discovery
 - **Agent System**: `gleaner_researcher_agent/` - Contains the LLM agent implementation
   - `agent.py` - Defines the `news_gatherer_agent` using Google ADK's LlmAgent with LiteLLM model (o4-mini)
   - `tools.py` - Web scraping tools for Jamaica Gleaner sections (lead stories and news)
@@ -28,6 +32,55 @@ The system uses a single specialized agent (`news_gatherer_agent`) that:
 - Identifies articles relevant to government accountability
 - Returns structured JSON responses with relevance scoring
 - Implements respectful crawling with 10-second delays
+
+### Article Discovery System
+
+The RSS-based article discovery system uses a multi-feed architecture that supports discovering articles from multiple RSS feeds simultaneously.
+
+**Key Features:**
+- **Multi-Feed Support**: Processes multiple RSS feeds in a single discovery operation
+- **Per-Feed Sections**: Each feed can map to a different section (e.g., "lead-stories", "news")
+- **Cross-Feed Deduplication**: Automatically deduplicates articles that appear in multiple feeds
+- **Fail-Soft Error Handling**: If one feed fails, continues processing remaining feeds
+- **Retry Logic**: Exponential backoff retry logic for network failures
+
+**Components:**
+- `GleanerRssFeedDiscoverer`: Main discoverer class that processes multiple feeds
+- `RssFeedConfig`: Configuration dataclass for feed URL + section mapping
+- `DiscoveredArticle`: Model for discovered article metadata (URL, title, section, dates)
+
+**Usage Example:**
+```python
+from src.article_discovery.discoverers.gleaner_rss_discoverer import GleanerRssFeedDiscoverer
+from src.article_discovery.models import RssFeedConfig
+
+# Configure multiple feeds
+feed_configs = [
+    RssFeedConfig(
+        url="https://jamaica-gleaner.com/feed/rss.xml",
+        section="lead-stories"
+    ),
+    RssFeedConfig(
+        url="https://jamaica-gleaner.com/feed/news.xml",
+        section="news"
+    )
+]
+
+# Discover articles from all feeds
+discoverer = GleanerRssFeedDiscoverer(feed_configs=feed_configs)
+articles = await discoverer.discover(news_source_id=1)
+```
+
+**Important Design Notes:**
+- Feed URLs are passed as constructor parameters (not stored in database)
+- Articles are deduplicated by URL across all feeds (first occurrence kept)
+- Each feed is processed sequentially (not concurrently) to respect rate limits
+- Discovery happens BEFORE extraction and classification
+- No `article_id` at discovery stage (articles not yet stored)
+
+**Testing:**
+- Unit tests: `tests/article_discovery/discoverers/test_gleaner_rss_discoverer.py` (21 tests)
+- Validation script: `scripts/validate_rss_discovery.py`
 
 ### Dependencies
 
