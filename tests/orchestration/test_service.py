@@ -6,7 +6,8 @@ import asyncpg
 
 from src.orchestration.service import PipelineOrchestrationService
 from src.article_extractor.models import ExtractedArticleContent
-from src.article_extractor.service import ArticleExtractionService
+from src.article_extractor.base import ArticleExtractionService
+from src.article_extractor.service import DefaultArticleExtractionService
 from src.article_classification.models import ClassificationResult, ClassifierType
 from src.article_classification.service import ClassificationService
 from src.article_persistence.service import PostgresArticlePersistenceService

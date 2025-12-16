@@ -40,3 +40,44 @@ class ArticleExtractor(Protocol):
             ValueError: If required elements are missing or parsing fails
         """
         ...
+
+
+class ArticleExtractionService(Protocol):
+    """
+    Protocol for article extraction services.
+
+    This protocol defines the interface for services that extract article
+    content from URLs using domain-specific strategies. Any class that
+    implements the extract_article_content() method with the correct
+    signature can be used as an ArticleExtractionService.
+
+    This enables:
+    - Dependency injection with type safety
+    - Easy mocking in tests
+    - Multiple service implementations (e.g., caching, rate-limiting)
+
+    Example:
+        class MyExtractionService:  # No inheritance needed!
+            def extract_article_content(self, url: str) -> ExtractedArticleContent:
+                # Implementation here
+                pass
+
+        # MyExtractionService satisfies ArticleExtractionService Protocol
+    """
+
+    def extract_article_content(self, url: str) -> ExtractedArticleContent:
+        """
+        Extract structured article content from URL.
+
+        Args:
+            url: Full article URL
+
+        Returns:
+            ExtractedArticleContent with title, full_text, author, published_date
+
+        Raises:
+            ValueError: If URL is invalid or domain is not supported
+            requests.HTTPError: If HTTP request fails
+            requests.RequestException: For other network errors
+        """
+        ...

@@ -1,8 +1,8 @@
-"""Tests for ArticleExtractionService."""
+"""Tests for DefaultArticleExtractionService."""
 import pytest
 
 from src.article_extractor.service import (
-    ArticleExtractionService,
+    DefaultArticleExtractionService,
     _parse_and_validate_url,
 )
 
@@ -116,7 +116,7 @@ class TestUnsupportedDomain:
 
     async def test_unsupported_domain_raises_value_error(self):
         # Given: a URL from an unsupported domain
-        service = ArticleExtractionService()
+        service = DefaultArticleExtractionService()
         url = "https://example.com/article/test"
 
         # When/Then: extracting content raises ValueError
@@ -131,7 +131,7 @@ class TestUnsupportedDomain:
 
     async def test_unsupported_subdomain_raises_value_error(self):
         # Given: a URL with subdomain from unsupported site
-        service = ArticleExtractionService()
+        service = DefaultArticleExtractionService()
         url = "https://news.bbc.com/article/test"
 
         # When/Then: extracting content raises ValueError
@@ -145,7 +145,7 @@ class TestUnsupportedDomain:
 
     async def test_error_message_lists_all_supported_domains(self):
         # Given: a URL from an unsupported domain
-        service = ArticleExtractionService()
+        service = DefaultArticleExtractionService()
         url = "https://unsupported-news.com/article/test"
 
         # When/Then: extracting content raises ValueError with all supported domains

@@ -3,7 +3,7 @@ from typing import Protocol
 from .models import DiscoveredArticle
 
 
-class ArticleDiscovery(Protocol):
+class ArticleDiscoverer(Protocol):
     """
     Protocol for article discovery strategies using structural subtyping.
 

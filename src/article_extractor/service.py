@@ -1,14 +1,16 @@
 """Article extraction service with strategy pattern."""
-import requests
 from urllib.parse import urlparse
 
-from .models import ExtractedArticleContent
+import requests
+
 from src.article_extractor.extractors.gleaner_extractor import GleanerExtractor
+from .base import ArticleExtractor
+from .models import ExtractedArticleContent
 
 
-class ArticleExtractionService:
+class DefaultArticleExtractionService:
     """
-    Main service for extracting article content using domain-specific strategies.
+    Default implementation of ArticleExtractionService protocol.
 
     This service implements the Context in the Strategy Pattern:
     1. Fetches HTML from the URL
@@ -20,7 +22,7 @@ class ArticleExtractionService:
     - jamaica-gleaner.com (via GleanerExtractor - updated December 2025)
 
     Example:
-        service = ArticleExtractionService()
+        service = DefaultArticleExtractionService()
         content = service.extract_article_content(
             "https://jamaica-gleaner.com/article/news/..."
         )
@@ -62,7 +64,7 @@ class ArticleExtractionService:
         domain = _parse_and_validate_url(url)
 
         # Select extraction strategy based on domain
-        extractor = self.extractors.get(domain)
+        extractor: ArticleExtractor | None = self.extractors.get(domain)
         if not extractor:
             supported = ", ".join(self.extractors.keys())
             raise ValueError(
