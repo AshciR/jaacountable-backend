@@ -7,7 +7,8 @@ import logging
 import asyncpg
 
 from src.article_extractor.models import ExtractedArticleContent
-from src.article_extractor.service import ArticleExtractionService
+from src.article_extractor.base import ArticleExtractionService
+from src.article_extractor.service import DefaultArticleExtractionService
 from src.article_classification.models import ClassificationInput, ClassificationResult
 from src.article_classification.service import ClassificationService
 from src.article_classification.agents.corruption_classifier import CorruptionClassifier
@@ -63,13 +64,13 @@ class PipelineOrchestrationService:
 
         Args:
             extraction_service: Service for extracting article content
-                (default: ArticleExtractionService())
+                (default: DefaultArticleExtractionService())
             classification_service: Service for classifying articles
                 (default: ClassificationService with CorruptionClassifier)
             persistence_service: Service for storing articles and classifications
                 (default: PostgresArticlePersistenceService())
         """
-        self.extraction_service = extraction_service or ArticleExtractionService()
+        self.extraction_service = extraction_service or DefaultArticleExtractionService()
         self.classification_service = classification_service or ClassificationService(
             classifiers=[
                 CorruptionClassifier(),

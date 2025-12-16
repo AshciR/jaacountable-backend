@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 from unittest.mock import Mock
 
 from src.article_extractor.models import ExtractedArticleContent
-from src.article_extractor.service import ArticleExtractionService
+from src.article_extractor.base import ArticleExtractionService
+from src.article_extractor.service import DefaultArticleExtractionService
 from src.orchestration.service import PipelineOrchestrationService
 
 
