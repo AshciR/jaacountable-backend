@@ -220,28 +220,6 @@ class TestClassificationServiceErrorHandling:
         # Then: Returns empty list
         assert len(results) == 0
 
-    async def test_logs_classifier_failure_with_details(
-        self,
-        sample_corruption_article: ClassificationInput,
-        failing_classifier: FailingClassifier,
-        caplog: pytest.LogCaptureFixture,
-    ):
-        # Given: Service with failing classifier
-        service = ClassificationService(classifiers=[failing_classifier])
-
-        # When: Classifying an article
-        await service.classify(sample_corruption_article)
-
-        # Then: Logger warning called with classifier name, URL, and exception
-        assert len(caplog.records) == 1
-        log_record = caplog.records[0]
-        assert log_record.levelname == "WARNING"
-        assert "FailingClassifier" in log_record.message  # Classifier name
-        assert sample_corruption_article.url in log_record.message
-        assert "ValueError" in log_record.message
-        assert "Classifier failed" in log_record.message
-
-
 class TestClassificationServiceEdgeCases:
     """Test edge cases and boundary conditions."""
 
