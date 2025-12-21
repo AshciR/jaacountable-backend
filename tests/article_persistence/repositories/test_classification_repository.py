@@ -6,7 +6,11 @@ from datetime import datetime, timedelta, timezone
 
 from src.article_persistence.repositories.classification_repository import ClassificationRepository
 from src.article_persistence.models.domain import Classification
-from tests.article_persistence.repositories.utils import create_test_article
+from tests.article_persistence.repositories.utils import (
+    check_record_exists,
+    create_test_article,
+    delete_article,
+)
 
 
 
@@ -210,16 +214,10 @@ class TestInsertClassificationDatabaseConstraints:
         )
 
         # When: the article is deleted
-        await db_connection.execute(
-            "DELETE FROM articles WHERE id = $1", inserted_article.id
-        )
+        await delete_article(db_connection, inserted_article.id)
 
         # Then: the classification is also deleted (cascade)
-        result = await db_connection.fetchval(
-            "SELECT COUNT(*) FROM classifications WHERE id = $1",
-            inserted_classification.id,
-        )
-        assert result == 0
+        assert not await check_record_exists(db_connection, "classifications", inserted_classification.id)
 
 
 class TestInsertClassificationEdgeCases:
