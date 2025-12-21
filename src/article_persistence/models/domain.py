@@ -135,3 +135,57 @@ class ArticleStorageResult(BaseModel):
     classifications: list[Classification]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class Entity(BaseModel):
+    """
+    Represents a named entity extracted from articles.
+
+    Attributes:
+        id: Database primary key, None for new entities
+        name: Display name as extracted from article
+        normalized_name: AI-normalized canonical name for deduplication
+        created_at: Timestamp when entity was created
+    """
+    id: int | None = None
+    name: str
+    normalized_name: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator('name', 'normalized_name')
+    @classmethod
+    def validate_required_string(cls, v: str) -> str:
+        """Validate that required string fields are not empty."""
+        if not v or not v.strip():
+            raise ValueError('Field cannot be empty')
+        return v.strip()
+
+
+class ArticleEntity(BaseModel):
+    """
+    Many-to-many association between articles and entities.
+
+    Attributes:
+        id: Database primary key, None for new associations
+        article_id: Foreign key to articles table
+        entity_id: Foreign key to entities table
+        classifier_type: Which classifier extracted this entity
+        created_at: Timestamp when association was created
+    """
+    id: int | None = None
+    article_id: int
+    entity_id: int
+    classifier_type: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator('classifier_type')
+    @classmethod
+    def validate_required_string(cls, v: str) -> str:
+        """Validate that required string fields are not empty."""
+        if not v or not v.strip():
+            raise ValueError('Field cannot be empty')
+        return v.strip()
