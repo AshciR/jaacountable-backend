@@ -27,7 +27,7 @@ jobs:
         run: uv sync
 
       - name: Run contract tests
-        run: uv run pytest tests/ -v --log-cli-level=INFO -m contract
+        run: uv run pytest tests/ -v --log-cli-level=INFO -m contract --force-sugar
 
       - name: Notify on failure
         if: failure()

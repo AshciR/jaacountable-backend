@@ -27,6 +27,6 @@ jobs:
         run: uv sync
 
       - name: Run integration tests
-        run: uv run pytest tests/ -v --log-cli-level=INFO -n auto --dist loadfile -m integration
+        run: uv run pytest tests/ -v --log-cli-level=INFO -n auto --dist loadfile -m integration --force-sugar
         env:
           OPENAI_API_KEY: ${{ secrets.CLASSIFIER_AGENTS_CI }}

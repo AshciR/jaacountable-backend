@@ -12,7 +12,7 @@ dependencies = [
     "feedparser>=6.0.12",
     "google-adk[eval]==1.19.0",
     "greenlet>=3.2.3",
-    "litellm>=1.80.7",
+    "litellm>=1.80.11",
     "lxml>=6.0.2",
     "pandas>=2.3.1",
     "pydantic>=2.11.7",

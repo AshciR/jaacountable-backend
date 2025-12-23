@@ -352,13 +352,13 @@ def mock_session_service(mock_session: Mock) -> AsyncMock:
 
 @pytest.fixture
 def mock_final_event() -> Mock:
-    """Mock final response event with valid JSON."""
+    """Mock final response event with valid JSON and normalized entities."""
     event = Mock()
     event.is_final_response = Mock(return_value=True)
     event.content = Mock()
     event.content.parts = [
         Mock(
-            text='{"is_relevant": true, "confidence": 0.9, "reasoning": "OCG investigation", "key_entities": ["OCG"], "classifier_type": "CORRUPTION", "model_name": "gpt-5-nano"}'
+            text='{"is_relevant": true, "confidence": 0.9, "reasoning": "OCG investigation", "key_entities": ["ocg", "ministry_of_education"], "classifier_type": "CORRUPTION", "model_name": "gpt-5-nano"}'
         )
     ]
     event.actions = None
