@@ -8,6 +8,7 @@ load_dotenv()
 
 APP_NAME = "jaccountable_backend"
 CLASSIFICATION_MODEL = "gpt-5-nano"
+NORMALIZATION_MODEL = "gpt-5-nano"
 
 class ArticleClassifier(Protocol):
     """

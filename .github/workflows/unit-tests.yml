@@ -27,4 +27,4 @@ jobs:
         run: uv sync
 
       - name: Run unit tests
-        run: uv run pytest tests/ -v --log-cli-level=INFO -n auto --dist loadfile -m "not external"
+        run: uv run pytest tests/ -v --log-cli-level=INFO -n auto --dist loadfile -m "not external" --force-sugar
