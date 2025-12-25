@@ -126,19 +126,19 @@ class PipelineOrchestrationService:
         success, result = self._extract_article(url, section)
         if not success:
             return result  # type: ignore
-        extracted = result  # type: ignore
+        extracted: ExtractedArticleContent = result  # type: ignore
 
         # Step 2: Convert to classification input
         success, result = self._convert_to_classification_input(extracted, url, section)
         if not success:
             return result  # type: ignore
-        classification_input = result  # type: ignore
+        classification_input: ClassificationInput = result  # type: ignore
 
         # Step 3: Classify article
         success, result = await self._classify_article(classification_input, url, section)
         if not success:
             return result  # type: ignore
-        classification_results = result  # type: ignore
+        classification_results: list[ClassificationResult] = result  # type: ignore
 
         # Step 4: Filter relevant classifications
         success, result = self._filter_and_check_relevance(
@@ -146,7 +146,7 @@ class PipelineOrchestrationService:
         )
         if not success:
             return result  # type: ignore
-        relevant_results = result  # type: ignore
+        relevant_results: list[ClassificationResult] = result  # type: ignore
 
         # Step 5: Store article and classifications
         return await self._store_article(

@@ -115,7 +115,7 @@ class NewsSource(BaseModel):
 
 class ArticleStorageResult(BaseModel):
     """
-    Result of storing an article with classifications.
+    Result of storing an article with classifications and entities.
 
     This model represents the outcome of a store operation,
     including whether the article was stored or already existed,
@@ -127,12 +127,16 @@ class ArticleStorageResult(BaseModel):
         classification_count: Number of classifications stored with article
         article: Full Article model if stored, None if duplicate
         classifications: List of Classification models stored with article
+        entity_count: Number of unique entities stored with article
+        entities: List of Entity models stored with article
     """
     stored: bool
     article_id: int | None
     classification_count: int
     article: Article | None
     classifications: list[Classification]
+    entity_count: int = 0
+    entities: list["Entity"] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
