@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from src.article_persistence.repositories.article_repository import ArticleRepository
 from src.article_persistence.models.domain import Article
-from tests.article_persistence.repositories.utils import create_test_news_source
+from tests.article_persistence.utils import create_test_news_source
 
 
 class TestInsertArticleHappyPath:

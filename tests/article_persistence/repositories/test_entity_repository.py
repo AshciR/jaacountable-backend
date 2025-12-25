@@ -4,7 +4,7 @@ import asyncpg
 
 from src.article_persistence.models.domain import Entity
 from src.article_persistence.repositories.entity_repository import EntityRepository
-from tests.article_persistence.repositories.utils import (
+from tests.article_persistence.utils import (
     create_test_article,
     create_test_article_entity,
     create_test_entity,

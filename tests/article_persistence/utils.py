@@ -166,3 +166,71 @@ async def check_record_exists(
         record_id,
     )
     return count > 0
+
+
+async def count_articles_by_url(
+    conn: asyncpg.Connection,
+    url: str,
+) -> int:
+    """
+    Count articles by URL.
+
+    Args:
+        conn: Database connection
+        url: Article URL to search for
+
+    Returns:
+        int: Number of articles with this URL
+    """
+    return await conn.fetchval(
+        "SELECT COUNT(*) FROM articles WHERE url = $1",
+        url,
+    )
+
+
+async def count_article_entities(
+    conn: asyncpg.Connection,
+    article_id: int,
+) -> int:
+    """
+    Count article-entity links for a given article.
+
+    Args:
+        conn: Database connection
+        article_id: ID of the article
+
+    Returns:
+        int: Number of entity links for this article
+    """
+    return await conn.fetchval(
+        "SELECT COUNT(*) FROM article_entities WHERE article_id = $1",
+        article_id,
+    )
+
+
+async def count_entity_links_by_name(
+    conn: asyncpg.Connection,
+    article_id: int,
+    normalized_name: str,
+) -> int:
+    """
+    Count article-entity links for a specific entity by normalized name.
+
+    Args:
+        conn: Database connection
+        article_id: ID of the article
+        normalized_name: Normalized name of the entity
+
+    Returns:
+        int: Number of links between this article and entities with this normalized name
+    """
+    return await conn.fetchval(
+        """
+        SELECT COUNT(*) FROM article_entities
+        WHERE article_id = $1 AND entity_id = (
+            SELECT id FROM entities WHERE normalized_name = $2
+        )
+        """,
+        article_id,
+        normalized_name,
+    )

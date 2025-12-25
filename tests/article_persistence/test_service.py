@@ -5,11 +5,14 @@ import asyncpg
 from unittest.mock import AsyncMock, MagicMock
 
 from src.article_persistence.service import PostgresArticlePersistenceService
-from src.article_persistence.models.domain import ArticleStorageResult, Classification
+from src.article_persistence.models.domain import ArticleStorageResult, Classification, Entity
 from src.article_persistence.repositories.article_repository import ArticleRepository
 from src.article_persistence.repositories.classification_repository import ClassificationRepository
+from src.article_persistence.repositories.entity_repository import EntityRepository
+from src.article_persistence.repositories.article_entity_repository import ArticleEntityRepository
 from src.article_extractor.models import ExtractedArticleContent
 from src.article_classification.models import ClassificationResult, ClassifierType
+from .utils import count_articles_by_url, count_article_entities, count_entity_links_by_name
 
 
 class TestStoreArticleWithClassificationsHappyPath:
@@ -360,6 +363,193 @@ class TestStoreArticleWithClassificationsTransactionRollback:
         """
         classification_count = await db_connection.fetchval(classification_query, url)
         assert classification_count == 0, "No classifications should exist after transaction rollback"
+
+
+class TestEntityStorageHappyPath:
+    """Happy path tests for entity storage."""
+
+    async def test_store_article_with_entities_succeeds(
+        self,
+        service: PostgresArticlePersistenceService,
+        db_connection: asyncpg.Connection,
+        sample_extracted_content: ExtractedArticleContent,
+    ):
+        # Given: Classification with pre-normalized entities
+        classification = ClassificationResult(
+            is_relevant=True,
+            confidence=0.9,
+            reasoning="OCG investigation into Ministry contract",
+            key_entities=["ruel_reid", "ocg", "ministry_of_education"],
+            classifier_type=ClassifierType.CORRUPTION,
+            model_name="gpt-4o-mini",
+        )
+
+        # When: Storing article with classifications
+        result = await service.store_article_with_classifications(
+            conn=db_connection,
+            extracted=sample_extracted_content,
+            url="https://jamaica-gleaner.com/article/news/entity-test-1",
+            section="news",
+            relevant_classifications=[classification],
+        )
+
+        # Then: Article stored successfully with entities
+        assert result.stored is True
+        assert result.article_id is not None
+        assert result.entity_count == 3
+        assert len(result.entities) == 3
+
+        # Verify entities are in database
+        entity_repo = EntityRepository()
+        entities = await entity_repo.find_entities_by_article_id(
+            db_connection, result.article_id
+        )
+        assert len(entities) == 3
+
+        # Verify normalized names
+        normalized_names = {e.normalized_name for e in entities}
+        assert normalized_names == {"ruel_reid", "ocg", "ministry_of_education"}
+
+        # Verify article-entity links exist
+        link_count = await count_article_entities(db_connection, result.article_id)
+        assert link_count == 3
+
+    async def test_entity_deduplication_across_classifications(
+        self,
+        service: PostgresArticlePersistenceService,
+        db_connection: asyncpg.Connection,
+        sample_extracted_content: ExtractedArticleContent,
+    ):
+        # Given: Two classifications with overlapping entities
+        classifications = [
+            ClassificationResult(
+                is_relevant=True,
+                confidence=0.9,
+                reasoning="Corruption case",
+                key_entities=["ocg", "ruel_reid"],
+                classifier_type=ClassifierType.CORRUPTION,
+                model_name="gpt-4o-mini",
+            ),
+            ClassificationResult(
+                is_relevant=True,
+                confidence=0.8,
+                reasoning="Hurricane relief mismanagement",
+                key_entities=["ocg", "odpem"],
+                classifier_type=ClassifierType.HURRICANE_RELIEF,
+                model_name="gpt-4o-mini",
+            ),
+        ]
+
+        # When: Storing article
+        result = await service.store_article_with_classifications(
+            conn=db_connection,
+            extracted=sample_extracted_content,
+            url="https://jamaica-gleaner.com/article/news/dedup-test",
+            section="news",
+            relevant_classifications=classifications,
+        )
+
+        # Then: Only 3 unique entities stored (OCG, Ruel Reid, ODPEM)
+        assert result.entity_count == 3
+        assert len(result.entities) == 3
+
+        entity_repo = EntityRepository()
+        entities = await entity_repo.find_entities_by_article_id(
+            db_connection, result.article_id
+        )
+        assert len(entities) == 3
+
+        # Verify OCG is linked once (database constraint allows only one link per entity)
+        ocg_links = await count_entity_links_by_name(db_connection, result.article_id, "ocg")
+        assert ocg_links == 1  # Linked once despite being extracted by both classifiers
+
+
+class TestEntityStorageEdgeCases:
+    """Edge case tests for entity storage."""
+
+    async def test_classification_with_empty_entities_succeeds(
+        self,
+        service: PostgresArticlePersistenceService,
+        db_connection: asyncpg.Connection,
+        sample_extracted_content: ExtractedArticleContent,
+    ):
+        # Given: Classification with no entities
+        classification = ClassificationResult(
+            is_relevant=True,
+            confidence=0.7,
+            reasoning="Relevant but no entities extracted",
+            key_entities=[],
+            classifier_type=ClassifierType.CORRUPTION,
+            model_name="gpt-4o-mini",
+        )
+
+        # When: Storing article
+        result = await service.store_article_with_classifications(
+            conn=db_connection,
+            extracted=sample_extracted_content,
+            url="https://jamaica-gleaner.com/article/news/no-entities",
+            section="news",
+            relevant_classifications=[classification],
+        )
+
+        # Then: Article stored without entities
+        assert result.stored is True
+        assert result.entity_count == 0
+        assert len(result.entities) == 0
+
+        entity_repo = EntityRepository()
+        entities = await entity_repo.find_entities_by_article_id(
+            db_connection, result.article_id
+        )
+        assert len(entities) == 0
+
+
+class TestEntityStorageTransactionRollback:
+    """Transaction rollback tests for entity storage."""
+
+    async def test_entity_storage_failure_rolls_back_article(
+        self,
+        db_connection: asyncpg.Connection,
+        sample_extracted_content: ExtractedArticleContent,
+    ):
+        # Given: Service with mock entity repository that fails
+        mock_entity_repo = MagicMock()
+        mock_entity_repo.find_by_normalized_name = AsyncMock(return_value=None)
+        mock_entity_repo.insert_entity = AsyncMock(
+            side_effect=Exception("Entity insert failed")
+        )
+
+        service = PostgresArticlePersistenceService(
+            article_repo=ArticleRepository(),
+            classification_repo=ClassificationRepository(),
+            entity_repo=mock_entity_repo,
+            article_entity_repo=ArticleEntityRepository(),
+        )
+
+        classification = ClassificationResult(
+            is_relevant=True,
+            confidence=0.9,
+            reasoning="OCG investigation",
+            key_entities=["ocg"],
+            classifier_type=ClassifierType.CORRUPTION,
+            model_name="gpt-4o-mini",
+        )
+
+        url = "https://jamaica-gleaner.com/article/news/rollback-entity-test"
+
+        # When: Storing article with entity that will fail
+        with pytest.raises(Exception, match="Entity insert failed"):
+            await service.store_article_with_classifications(
+                conn=db_connection,
+                extracted=sample_extracted_content,
+                url=url,
+                section="news",
+                relevant_classifications=[classification],
+            )
+
+        # Then: Article not stored (transaction rolled back)
+        count = await count_articles_by_url(db_connection, url)
+        assert count == 0
 
 
 @pytest.fixture

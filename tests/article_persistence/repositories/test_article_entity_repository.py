@@ -1,10 +1,9 @@
 import pytest
-from datetime import datetime, timezone
 import asyncpg
 
 from src.article_persistence.models.domain import ArticleEntity
 from src.article_persistence.repositories.article_entity_repository import ArticleEntityRepository
-from tests.article_persistence.repositories.utils import (
+from tests.article_persistence.utils import (
     check_record_exists,
     create_test_article,
     create_test_entity,
