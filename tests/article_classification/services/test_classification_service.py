@@ -9,7 +9,7 @@ from src.article_classification.models import (
     ClassificationResult,
     ClassifierType,
 )
-from src.article_classification.service import ClassificationService
+from src.article_classification.services.classification_service import ClassificationService
 
 
 class MockCorruptionClassifier:

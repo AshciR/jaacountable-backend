@@ -4,18 +4,16 @@ These tests make actual LLM API calls to verify the normalization agent works co
 Run sparingly to avoid API costs.
 """
 import pytest
-
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService, Session
 from google.genai import types
 from google.genai.types import Content
 
 from src.article_classification.agents.normalization_agent import normalization_agent
+from src.article_classification.base import APP_NAME, NORMALIZATION_MODEL
 from src.article_classification.models import (
-    EntityNormalizationInput,
     EntityNormalizationResult,
 )
-from src.article_classification.base import APP_NAME, NORMALIZATION_MODEL
 
 
 @pytest.fixture
@@ -106,11 +104,13 @@ class TestNormalizationAgentIntegration:
         # Then: Returns normalized entity with underscores
         result = EntityNormalizationResult.model_validate_json(response)
         assert isinstance(result, EntityNormalizationResult)
-        assert "Hon. Ruel Reid" in result.normalized_entities
-        normalized = result.normalized_entities["Hon. Ruel Reid"]
+        assert len(result.normalized_entities) == 1
+        entity = result.normalized_entities[0]
+        assert entity.original_value == "Hon. Ruel Reid"
         # Should remove title, lowercase, and use underscores
-        assert "ruel_reid" == normalized
-        assert result.confidence >= 0.8  # Should be confident
+        assert entity.normalized_value == "ruel_reid"
+        assert entity.confidence >= 0.8  # Should be confident
+        assert len(entity.reason) > 0  # Should have reasoning
         assert result.model_name == NORMALIZATION_MODEL
 
     async def test_normalize_acronym(
@@ -127,9 +127,11 @@ class TestNormalizationAgentIntegration:
 
         # Then: Returns acronym in lowercase
         result = EntityNormalizationResult.model_validate_json(response)
-        assert "OCG" in result.normalized_entities
-        assert result.normalized_entities["OCG"] == "ocg"
-        assert result.confidence >= 0.9  # Very confident for acronyms
+        assert len(result.normalized_entities) == 1
+        entity = result.normalized_entities[0]
+        assert entity.original_value == "OCG"
+        assert entity.normalized_value == "ocg"
+        assert entity.confidence >= 0.9  # Very confident for acronyms
         assert result.model_name == NORMALIZATION_MODEL
 
     async def test_normalize_ministry(
@@ -146,10 +148,11 @@ class TestNormalizationAgentIntegration:
 
         # Then: Returns standardized ministry name with underscores
         result = EntityNormalizationResult.model_validate_json(response)
-        assert "Ministry of Education" in result.normalized_entities
-        normalized = result.normalized_entities["Ministry of Education"]
-        assert normalized == "ministry_of_education"
-        assert result.confidence >= 0.8
+        assert len(result.normalized_entities) == 1
+        entity = result.normalized_entities[0]
+        assert entity.original_value == "Ministry of Education"
+        assert entity.normalized_value == "ministry_of_education"
+        assert entity.confidence >= 0.8
         assert result.model_name == NORMALIZATION_MODEL
 
     async def test_normalize_multiple_entities(
@@ -168,14 +171,20 @@ class TestNormalizationAgentIntegration:
         result = EntityNormalizationResult.model_validate_json(response)
         assert len(result.normalized_entities) == 4
 
-        # Check individual normalizations
-        assert result.normalized_entities["Hon. Ruel Reid"] == "ruel_reid"
-        assert result.normalized_entities["OCG"] == "ocg"
-        assert result.normalized_entities["Ministry of Education"] == "ministry_of_education"
-        assert result.normalized_entities["The OCG"] == "ocg"  # Should handle "The" prefix
+        # Build a dict for easier lookup (original_value -> normalized_value)
+        entity_map = {e.original_value: e.normalized_value for e in result.normalized_entities}
 
-        assert result.confidence >= 0.7  # Overall confidence should be good
-        assert len(result.notes) > 0  # Should provide notes
+        # Check individual normalizations
+        assert entity_map["Hon. Ruel Reid"] == "ruel_reid"
+        assert entity_map["OCG"] == "ocg"
+        assert entity_map["Ministry of Education"] == "ministry_of_education"
+        assert entity_map["The OCG"] == "ocg"  # Should handle "The" prefix
+
+        # Each entity should have confidence >= 0.7 and a reason
+        for entity in result.normalized_entities:
+            assert entity.confidence >= 0.7
+            assert len(entity.reason) > 0
+
         assert result.model_name == NORMALIZATION_MODEL
 
     async def test_normalize_with_various_titles(
@@ -191,12 +200,19 @@ class TestNormalizationAgentIntegration:
 
         # Then: All titles removed, names normalized with underscores
         result = EntityNormalizationResult.model_validate_json(response)
+        assert len(result.normalized_entities) == 4
+
+        # Build a dict for easier lookup
+        entity_map = {e.original_value: e.normalized_value for e in result.normalized_entities}
 
         # All should be lowercase with underscores, titles removed
-        assert "andrew_holness" in result.normalized_entities["Mr. Andrew Holness"]
-        assert "nigel_clarke" in result.normalized_entities["Dr. Nigel Clarke"]
-        assert "reid" in result.normalized_entities["Education Minister Reid"]
-        assert "holness" in result.normalized_entities["Prime Minister Holness"]
+        assert "andrew_holness" in entity_map["Mr. Andrew Holness"]
+        assert "nigel_clarke" in entity_map["Dr. Nigel Clarke"]
+        assert "reid" in entity_map["Education Minister Reid"]
+        assert "holness" in entity_map["Prime Minister Holness"]
 
-        assert result.confidence >= 0.8
+        # Each entity should be confident
+        for entity in result.normalized_entities:
+            assert entity.confidence >= 0.8
+
         assert result.model_name == NORMALIZATION_MODEL

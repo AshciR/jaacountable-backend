@@ -39,19 +39,30 @@ Your task: Normalize entity names to canonical forms for consistency across arti
 Return ONLY a valid JSON object matching this exact structure:
 
 {{
-    "normalized_entities": {{
-        "Original Name 1": "normalized_name_1",
-        "Original Name 2": "normalized_name_2"
-    }},
-    "confidence": 0.95,
-    "notes": "Brief explanation (optional)",
+    "normalized_entities": [
+        {{
+            "original_value": "Hon. Ruel Reid",
+            "normalized_value": "ruel_reid",
+            "confidence": 0.95,
+            "reason": "Removed title 'Hon.' and standardized format"
+        }},
+        {{
+            "original_value": "OCG",
+            "normalized_value": "ocg",
+            "confidence": 1.0,
+            "reason": "Lowercased acronym"
+        }}
+    ],
     "model_name": "{NORMALIZATION_MODEL}"
 }}
 
 **Field Guidelines:**
-- normalized_entities: Dictionary mapping each original name to its normalized form
-- confidence: Overall confidence score (0.0-1.0) - average across all entities
-- notes: Any relevant observations about the normalization
+- normalized_entities: Array of objects, one per input entity
+- Each object must contain:
+  - original_value: The original entity name provided
+  - normalized_value: The normalized canonical form
+  - confidence: Per-entity confidence score (0.0-1.0) using the scoring guide above
+  - reason: Brief explanation of normalization applied (e.g., "Removed title", "Lowercased acronym")
 
 **Important:**
 - Consistency is critical (same input → same output always)
@@ -67,10 +78,4 @@ normalization_agent = LlmAgent(
     name="entity_normalizer",
     description="Normalizes entity names from Jamaican news articles for consistency",
     instruction=instruction,
-)
-
-# Wrap as AgentTool for use by other agents
-normalization_tool = AgentTool(
-    agent=normalization_agent,
-    skip_summarization=False,
 )

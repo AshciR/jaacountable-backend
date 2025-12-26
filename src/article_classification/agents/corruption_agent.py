@@ -4,7 +4,6 @@ from google.adk.models.lite_llm import LiteLlm
 
 from src.article_classification.base import CLASSIFICATION_MODEL
 from src.article_classification.models import ClassificationResult
-from .normalization_agent import normalization_tool
 
 instruction = f"""
 You are a specialized corruption and government accountability classifier for Jamaican news articles.
@@ -70,15 +69,9 @@ Return ONLY a valid JSON object matching this exact structure:
 Extract 2-5 key entities mentioned: government agencies (OCG, MOCA), ministries,
 official names, specific programs/contracts.
 
-**IMPORTANT - Use the normalization_tool:**
-Before including entities in your final classification result, you MUST call the
-normalization_tool to normalize all extracted entity names. This ensures
-consistency across articles.
-
-Example workflow:
-1. Identify raw entities: ["Hon. Ruel Reid", "OCG", "Min. of Education"]
-2. Call normalization_tool with these entities
-3. Use the normalized names from the tool response in your final classification result
+Include the names of key entities as they appear in the article (preserve original
+formatting like titles, capitalization). Examples: "Hon. Ruel Reid", "Ministry of Education", "OCG".
+Do NOT normalize entity names - return them exactly as written in the article.
 
 **Important:**
 - Be conservative with confidence scores (high precision preferred)
@@ -91,6 +84,5 @@ corruption_classifier = LlmAgent(
     model=LiteLlm(model=CLASSIFICATION_MODEL),
     name="corruption_classifier",
     description="Analyzes articles for corruption, bribery, embezzlement, and government accountability issues",
-    instruction=instruction,
-    tools=[normalization_tool],
+    instruction=instruction
 )

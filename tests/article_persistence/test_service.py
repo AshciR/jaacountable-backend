@@ -36,6 +36,7 @@ class TestStoreArticleWithClassificationsHappyPath:
             url=url,
             section=section,
             relevant_classifications=sample_classification_results,
+            normalized_entities=[],
             news_source_id=1,
         )
 
@@ -95,6 +96,7 @@ class TestStoreArticleWithClassificationsHappyPath:
             url=url,
             section=section,
             relevant_classifications=multiple_classifications,
+            normalized_entities=[],
             news_source_id=1,
         )
 
@@ -127,6 +129,7 @@ class TestStoreArticleWithClassificationsDuplicates:
             url=url,
             section=section,
             relevant_classifications=sample_classification_results,
+            normalized_entities=[],
         )
 
         # When: Attempting to store same URL again
@@ -136,6 +139,7 @@ class TestStoreArticleWithClassificationsDuplicates:
             url=url,
             section=section,
             relevant_classifications=sample_classification_results,
+            normalized_entities=[],
         )
 
         # Then: Returns duplicate result
@@ -162,6 +166,7 @@ class TestStoreArticleWithClassificationsDuplicates:
             url=url,
             section=section,
             relevant_classifications=sample_classification_results,
+            normalized_entities=[],
         )
 
         # When: Attempting duplicate with different classifications
@@ -182,6 +187,7 @@ class TestStoreArticleWithClassificationsDuplicates:
             url=url,
             section=section,
             relevant_classifications=different_classifications,
+            normalized_entities=[],
         )
 
         # Then: Duplicate not stored, original classification count unchanged
@@ -210,6 +216,7 @@ class TestStoreArticleWithClassificationsValidation:
                 url=url,
                 section=section,
                 relevant_classifications=[],
+            normalized_entities=[],
                 news_source_id=1,
             )
 
@@ -235,6 +242,7 @@ class TestStoreArticleWithClassificationsEdgeCases:
             url=url,
             section=section,
             relevant_classifications=sample_classification_results,
+            normalized_entities=[],
         )
 
         # Then: Article stored successfully
@@ -276,6 +284,7 @@ class TestStoreArticleWithClassificationsTransactionRollback:
                 url=url,
                 section=section,
                 relevant_classifications=sample_classification_results,
+            normalized_entities=[],
                 news_source_id=1,
             )
 
@@ -347,6 +356,7 @@ class TestStoreArticleWithClassificationsTransactionRollback:
                 url=url,
                 section=section,
                 relevant_classifications=multiple_classifications,
+            normalized_entities=[],
                 news_source_id=1,
             )
 
@@ -374,23 +384,47 @@ class TestEntityStorageHappyPath:
         db_connection: asyncpg.Connection,
         sample_extracted_content: ExtractedArticleContent,
     ):
-        # Given: Classification with pre-normalized entities
+        # Given: Classification with original entity names + normalized entities
+        from src.article_classification.models import NormalizedEntity
+
         classification = ClassificationResult(
             is_relevant=True,
             confidence=0.9,
             reasoning="OCG investigation into Ministry contract",
-            key_entities=["ruel_reid", "ocg", "ministry_of_education"],
+            key_entities=["Hon. Ruel Reid", "OCG", "Ministry of Education"],
             classifier_type=ClassifierType.CORRUPTION,
             model_name="gpt-4o-mini",
         )
 
-        # When: Storing article with classifications
+        normalized_entities = [
+            NormalizedEntity(
+                original_value="Hon. Ruel Reid",
+                normalized_value="ruel_reid",
+                confidence=0.95,
+                reason="Removed title and standardized"
+            ),
+            NormalizedEntity(
+                original_value="OCG",
+                normalized_value="ocg",
+                confidence=1.0,
+                reason="Lowercased acronym"
+            ),
+            NormalizedEntity(
+                original_value="Ministry of Education",
+                normalized_value="ministry_of_education",
+                confidence=0.9,
+                reason="Standardized ministry name"
+            ),
+        ]
+
+        # When: Storing article with classifications and normalized entities
         result = await service.store_article_with_classifications(
             conn=db_connection,
             extracted=sample_extracted_content,
             url="https://jamaica-gleaner.com/article/news/entity-test-1",
             section="news",
             relevant_classifications=[classification],
+            normalized_entities=normalized_entities,
         )
 
         # Then: Article stored successfully with entities
@@ -410,6 +444,10 @@ class TestEntityStorageHappyPath:
         normalized_names = {e.normalized_name for e in entities}
         assert normalized_names == {"ruel_reid", "ocg", "ministry_of_education"}
 
+        # Verify ORIGINAL names are stored (not normalized)
+        original_names = {e.name for e in entities}
+        assert original_names == {"Hon. Ruel Reid", "OCG", "Ministry of Education"}
+
         # Verify article-entity links exist
         link_count = await count_article_entities(db_connection, result.article_id)
         assert link_count == 3
@@ -420,13 +458,15 @@ class TestEntityStorageHappyPath:
         db_connection: asyncpg.Connection,
         sample_extracted_content: ExtractedArticleContent,
     ):
-        # Given: Two classifications with overlapping entities
+        # Given: Two classifications with overlapping entities + normalized entities
+        from src.article_classification.models import NormalizedEntity
+
         classifications = [
             ClassificationResult(
                 is_relevant=True,
                 confidence=0.9,
                 reasoning="Corruption case",
-                key_entities=["ocg", "ruel_reid"],
+                key_entities=["OCG", "Hon. Ruel Reid"],
                 classifier_type=ClassifierType.CORRUPTION,
                 model_name="gpt-4o-mini",
             ),
@@ -434,9 +474,37 @@ class TestEntityStorageHappyPath:
                 is_relevant=True,
                 confidence=0.8,
                 reasoning="Hurricane relief mismanagement",
-                key_entities=["ocg", "odpem"],
+                key_entities=["OCG", "ODPEM"],
                 classifier_type=ClassifierType.HURRICANE_RELIEF,
                 model_name="gpt-4o-mini",
+            ),
+        ]
+
+        # Normalized entities (with "OCG" appearing twice, should be deduplicated)
+        normalized_entities = [
+            NormalizedEntity(
+                original_value="OCG",
+                normalized_value="ocg",
+                confidence=1.0,
+                reason="Lowercased acronym"
+            ),
+            NormalizedEntity(
+                original_value="Hon. Ruel Reid",
+                normalized_value="ruel_reid",
+                confidence=0.95,
+                reason="Removed title"
+            ),
+            NormalizedEntity(
+                original_value="OCG",  # Duplicate - should be deduplicated
+                normalized_value="ocg",
+                confidence=1.0,
+                reason="Lowercased acronym"
+            ),
+            NormalizedEntity(
+                original_value="ODPEM",
+                normalized_value="odpem",
+                confidence=1.0,
+                reason="Lowercased acronym"
             ),
         ]
 
@@ -447,6 +515,7 @@ class TestEntityStorageHappyPath:
             url="https://jamaica-gleaner.com/article/news/dedup-test",
             section="news",
             relevant_classifications=classifications,
+            normalized_entities=normalized_entities,
         )
 
         # Then: Only 3 unique entities stored (OCG, Ruel Reid, ODPEM)
@@ -490,6 +559,7 @@ class TestEntityStorageEdgeCases:
             url="https://jamaica-gleaner.com/article/news/no-entities",
             section="news",
             relevant_classifications=[classification],
+            normalized_entities=[],
         )
 
         # Then: Article stored without entities
@@ -526,14 +596,26 @@ class TestEntityStorageTransactionRollback:
             article_entity_repo=ArticleEntityRepository(),
         )
 
+        from src.article_classification.models import NormalizedEntity
+
         classification = ClassificationResult(
             is_relevant=True,
             confidence=0.9,
             reasoning="OCG investigation",
-            key_entities=["ocg"],
+            key_entities=["OCG"],
             classifier_type=ClassifierType.CORRUPTION,
             model_name="gpt-4o-mini",
         )
+
+        # Add normalized entity that will trigger the mocked failure
+        normalized_entities = [
+            NormalizedEntity(
+                original_value="OCG",
+                normalized_value="ocg",
+                confidence=1.0,
+                reason="Lowercased acronym"
+            )
+        ]
 
         url = "https://jamaica-gleaner.com/article/news/rollback-entity-test"
 
@@ -545,6 +627,7 @@ class TestEntityStorageTransactionRollback:
                 url=url,
                 section="news",
                 relevant_classifications=[classification],
+                normalized_entities=normalized_entities,
             )
 
         # Then: Article not stored (transaction rolled back)

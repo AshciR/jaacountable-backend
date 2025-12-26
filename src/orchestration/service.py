@@ -9,9 +9,10 @@ import asyncpg
 from src.article_extractor.models import ExtractedArticleContent
 from src.article_extractor.base import ArticleExtractionService
 from src.article_extractor.service import DefaultArticleExtractionService
-from src.article_classification.models import ClassificationInput, ClassificationResult
-from src.article_classification.service import ClassificationService
-from src.article_classification.agents.corruption_classifier import CorruptionClassifier
+from src.article_classification.models import ClassificationInput, ClassificationResult, NormalizedEntity
+from src.article_classification.services.classification_service import ClassificationService
+from src.article_classification.classifiers.corruption_classifier import CorruptionClassifier
+from src.article_classification.services.entity_normalizer_service import EntityNormalizerService
 from src.article_classification.converters import extracted_content_to_classification_input
 from src.article_classification.utils import filter_relevant_classifications
 from src.article_persistence.service import PostgresArticlePersistenceService
@@ -58,6 +59,7 @@ class PipelineOrchestrationService:
         extraction_service: ArticleExtractionService | None = None,
         classification_service: ClassificationService | None = None,
         persistence_service: PostgresArticlePersistenceService | None = None,
+        entity_normalizer: EntityNormalizerService | None = None,
     ):
         """
         Initialize orchestration service with dependencies.
@@ -69,6 +71,8 @@ class PipelineOrchestrationService:
                 (default: ClassificationService with CorruptionClassifier)
             persistence_service: Service for storing articles and classifications
                 (default: PostgresArticlePersistenceService())
+            entity_normalizer: Service for normalizing entity names
+                (default: EntityNormalizerService())
         """
         self.extraction_service = extraction_service or DefaultArticleExtractionService()
         self.classification_service = classification_service or ClassificationService(
@@ -79,6 +83,7 @@ class PipelineOrchestrationService:
         self.persistence_service = (
             persistence_service or PostgresArticlePersistenceService()
         )
+        self.entity_normalizer = entity_normalizer or EntityNormalizerService()
 
     async def process_article(
         self,
@@ -148,6 +153,14 @@ class PipelineOrchestrationService:
             return result  # type: ignore
         relevant_results: list[ClassificationResult] = result  # type: ignore
 
+        # Step 4.5: Normalize entities from relevant classifications
+        try:
+            normalized_entities: list[NormalizedEntity] = await self._normalize_entities(relevant_results)
+        except Exception as e:
+            logger.error(f"Failed to normalize entities: {e}", exc_info=True)
+            # Continue without normalized entities (will be empty list)
+            normalized_entities = []
+
         # Step 5: Store article and classifications
         return await self._store_article(
             conn=conn,
@@ -156,6 +169,7 @@ class PipelineOrchestrationService:
             section=section,
             relevant_results=relevant_results,
             classification_results=classification_results,
+            normalized_entities=normalized_entities,
             news_source_id=news_source_id,
         )
 
@@ -363,6 +377,37 @@ class PipelineOrchestrationService:
                 ),
             )
 
+    async def _normalize_entities(
+        self,
+        relevant_classifications: list[ClassificationResult],
+    ) -> list[NormalizedEntity]:
+        """
+        Extract and normalize entities from relevant classifications.
+
+        Args:
+            relevant_classifications: Classifications that passed confidence threshold
+
+        Returns:
+            List of NormalizedEntity objects with original/normalized pairs
+        """
+        # Extract unique entities from all relevant classifications
+        unique_entities: set[str] = set()
+        for classification in relevant_classifications:
+            unique_entities.update(classification.key_entities)
+
+        if not unique_entities:
+            logger.info("No entities to normalize (all classifications had empty key_entities)")
+            return []
+
+        entity_list = list(unique_entities)
+        logger.info(f"Normalizing {len(entity_list)} unique entities")
+
+        # Normalize entities using normalizer service
+        normalized: list[NormalizedEntity] = await self.entity_normalizer.normalize(entity_list)
+
+        logger.info(f"Normalized {len(normalized)} entities")
+        return normalized
+
     async def _store_article(
         self,
         conn: asyncpg.Connection,
@@ -371,6 +416,7 @@ class PipelineOrchestrationService:
         section: str,
         relevant_results: list[ClassificationResult],
         classification_results: list[ClassificationResult],
+        normalized_entities: list[NormalizedEntity],
         news_source_id: int,
     ) -> OrchestrationResult:
         """
@@ -383,6 +429,7 @@ class PipelineOrchestrationService:
             section: Article section
             relevant_results: Filtered relevant classification results
             classification_results: All classification results (for result metadata)
+            normalized_entities: Normalized entities with original/normalized pairs
             news_source_id: News source database ID
 
         Returns:
@@ -395,6 +442,7 @@ class PipelineOrchestrationService:
                 url=url,
                 section=section,
                 relevant_classifications=relevant_results,
+                normalized_entities=normalized_entities,
                 news_source_id=news_source_id,
             )
 

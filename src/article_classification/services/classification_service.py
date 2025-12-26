@@ -2,8 +2,8 @@
 import asyncio
 import logging
 
-from .base import ArticleClassifier
-from .models import ClassificationInput, ClassificationResult
+from src.article_classification.base import ArticleClassifier
+from src.article_classification.models import ClassificationInput, ClassificationResult
 
 logger = logging.getLogger(__name__)
 

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from asyncpg import UniqueViolationError
 
 from src.article_extractor.models import ExtractedArticleContent
-from src.article_classification.models import ClassificationResult
+from src.article_classification.models import ClassificationResult, NormalizedEntity
 from .converters import (
     extracted_content_to_article,
     classification_result_to_classification,
@@ -62,6 +62,7 @@ class PostgresArticlePersistenceService:
         url: str,
         section: str,
         relevant_classifications: list[ClassificationResult],
+        normalized_entities: list[NormalizedEntity],
         news_source_id: int = 1,
     ) -> ArticleStorageResult:
         """
@@ -77,6 +78,7 @@ class PostgresArticlePersistenceService:
             section: Article section (e.g., "news", "lead-stories")
             relevant_classifications: List of relevant classification results.
                 Must contain at least one classification.
+            normalized_entities: List of normalized entities with original/normalized pairs
             news_source_id: Database ID of news source (default: 1 for Jamaica Gleaner)
 
         Returns:
@@ -96,6 +98,7 @@ class PostgresArticlePersistenceService:
             ...         url=url,
             ...         section="news",
             ...         relevant_classifications=results,
+            ...         normalized_entities=normalized_entities,
             ...     )
         """
         # Validate that at least one classification is provided
@@ -127,11 +130,11 @@ class PostgresArticlePersistenceService:
                     classifications=relevant_classifications,
                 )
 
-                # Extract and store entities (already normalized by classifiers)
+                # Store normalized entities with original/normalized pairs
                 stored_entities = await self._store_entities_for_article(
                     conn=conn,
                     article_id=stored_article.id,  # type: ignore
-                    classifications=relevant_classifications,
+                    normalized_entities=normalized_entities,
                 )
 
                 return ArticleStorageResult(
@@ -195,102 +198,97 @@ class PostgresArticlePersistenceService:
         self,
         conn: asyncpg.Connection,
         article_id: int,
-        classifications: list[ClassificationResult],
+        normalized_entities: list[NormalizedEntity],
     ) -> list[Entity]:
         """
-        Extract entities from classifications, deduplicate, and store with article links.
+        Store normalized entities and link them to the article.
 
         This method:
-        1. Collects all entities from all classifications
-        2. Deduplicates entities across classifications
-        3. Stores entities (find or create by normalized_name)
-        4. Links entities to article via article_entities junction table
+        1. Deduplicates entities by normalized_value
+        2. Stores entities with BOTH original_value (name) and normalized_value (normalized_name)
+        3. Links entities to article via article_entities junction table
 
         Args:
             conn: Database connection (within active transaction)
             article_id: Database ID of article
-            classifications: List of classification results with key_entities
+            normalized_entities: List of NormalizedEntity objects from normalizer
 
         Returns:
             List of Entity models that were stored (created or existing)
-
-        Note: Entities in ClassificationResult.key_entities are already normalized
-        by classifier agents, so no additional normalization is needed.
         """
-        # Step 1: Collect all entities from all classifications
-        # Build mapping: entity_name → list of classifier_types that extracted it
-        entity_sources: dict[str, list[str]] = {}
-        for classification in classifications:
-            for entity_name in classification.key_entities:
-                if entity_name not in entity_sources:
-                    entity_sources[entity_name] = []
-                entity_sources[entity_name].append(classification.classifier_type.value)
-
-        if not entity_sources:
-            logger.info("No entities to store (all classifications had empty key_entities)")
+        if not normalized_entities:
+            logger.info("No entities to store (normalized_entities is empty)")
             return []
 
-        # Step 2: Get deduplicated list of entities (already normalized)
-        unique_entities = list(entity_sources.keys())
+        # Step 1: Deduplicate by normalized_value (keep first occurrence for original_value)
+        seen_normalized: dict[str, NormalizedEntity] = {}
+        for entity in normalized_entities:
+            if entity.normalized_value not in seen_normalized:
+                seen_normalized[entity.normalized_value] = entity
+
+        unique_entities = list(seen_normalized.values())
         logger.info(
-            f"Extracted {len(unique_entities)} unique entities from {len(classifications)} classifications"
+            f"Deduplicating: {len(normalized_entities)} → {len(unique_entities)} unique entities"
         )
 
-        # Step 3: Store entities (find or create)
+        # Step 2: Store entities (find or create by normalized_name)
         stored_entities: list[Entity] = []
-        entity_id_mapping: dict[str, int] = {}  # normalized_name → entity_id
+        entity_id_mapping: dict[str, int] = {}  # normalized_value → entity_id
 
-        for entity_name in unique_entities:
+        for norm_entity in unique_entities:
             # Try to find existing entity by normalized name
             existing_entity = await self.entity_repo.find_by_normalized_name(
-                conn, entity_name
+                conn, norm_entity.normalized_value
             )
 
             if existing_entity:
-                entity_id_mapping[entity_name] = existing_entity.id  # type: ignore
+                entity_id_mapping[norm_entity.normalized_value] = existing_entity.id  # type: ignore
                 stored_entities.append(existing_entity)
-                logger.debug(f"Entity '{entity_name}' already exists (id={existing_entity.id})")
+                logger.debug(
+                    f"Entity '{norm_entity.normalized_value}' already exists "
+                    f"(id={existing_entity.id}, name={existing_entity.name})"
+                )
             else:
-                # Create new entity (name and normalized_name are the same since already normalized)
+                # Create new entity with BOTH original and normalized names
                 new_entity = Entity(
-                    name=entity_name,
-                    normalized_name=entity_name,
+                    name=norm_entity.original_value,  # Store ORIGINAL name
+                    normalized_name=norm_entity.normalized_value,  # Store NORMALIZED name
                     created_at=datetime.now(timezone.utc),
                 )
                 created_entity = await self.entity_repo.insert_entity(conn, new_entity)
-                entity_id_mapping[entity_name] = created_entity.id  # type: ignore
+                entity_id_mapping[norm_entity.normalized_value] = created_entity.id  # type: ignore
                 stored_entities.append(created_entity)
-                logger.info(f"Created new entity '{entity_name}' (id={created_entity.id})")
+                logger.info(
+                    f"Created new entity: name='{norm_entity.original_value}' "
+                    f"normalized_name='{norm_entity.normalized_value}' "
+                    f"(id={created_entity.id}, confidence={norm_entity.confidence})"
+                )
 
-        # Step 4: Link entities to article
-        # Note: Database constraint allows only one link per (article_id, entity_id) pair
-        # Use the first classifier that extracted this entity
+        # Step 3: Link entities to article
+        # For now, we don't track which classifier extracted each entity
+        # (that information is lost when we normalize all entities together)
+        # Use "CORRUPTION" as default classifier_type for all links
         links_created = 0
-        for entity_name, entity_id in entity_id_mapping.items():
-            classifier_types = entity_sources[entity_name]
-            # Use first classifier type for the link
-            primary_classifier = classifier_types[0]
+        for norm_entity in unique_entities:
+            entity_id = entity_id_mapping[norm_entity.normalized_value]
 
             article_entity = ArticleEntity(
                 article_id=article_id,
                 entity_id=entity_id,
-                classifier_type=primary_classifier,
+                classifier_type="CORRUPTION",  # Default for now
                 created_at=datetime.now(timezone.utc),
             )
 
             try:
                 await self.article_entity_repo.link_article_to_entity(conn, article_entity)
                 links_created += 1
-                classifiers_str = ", ".join(classifier_types)
                 logger.debug(
-                    f"Linked entity '{entity_name}' to article {article_id} "
-                    f"(classifiers: {classifiers_str}, using: {primary_classifier})"
+                    f"Linked entity '{norm_entity.normalized_value}' to article {article_id}"
                 )
             except UniqueViolationError:
-                # Link already exists (shouldn't happen in normal flow, but handle gracefully)
                 logger.debug(
-                    f"Link already exists: article={article_id}, entity={entity_id}, "
-                    f"classifier={primary_classifier}"
+                    f"Link already exists: article={article_id}, "
+                    f"entity={entity_id}, classifier=CORRUPTION"
                 )
 
         logger.info(

@@ -28,7 +28,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.article_classification.models import ClassificationInput, ClassificationResult
-from src.article_classification.agents.corruption_classifier import CorruptionClassifier
+from src.article_classification.classifiers.corruption_classifier import CorruptionClassifier
 
 
 # HTTP headers to mimic browser request (similar to successful curl command)
