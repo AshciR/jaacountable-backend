@@ -145,7 +145,7 @@ class GleanerExtractor(ArticleExtractor):
 
 **Service (Context):**
 ```python
-# src/services/article_extractor/service.py
+# src/services/article_extractor/classification_service.py
 import requests
 from urllib.parse import urlparse
 from .gleaner_extractor import GleanerExtractor
@@ -195,7 +195,7 @@ class ArticleExtractionService:
 ```python
 # To add Jamaica Observer support:
 # 1. Create observer_extractor.py with ObserverExtractor class
-# 2. Add to service.py:
+# 2. Add to classification_service.py:
 self.extractors['jamaicaobserver.com'] = ObserverExtractor()
 # That's it! No modification to existing code needed.
 ```

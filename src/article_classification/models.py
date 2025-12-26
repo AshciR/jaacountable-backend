@@ -199,101 +199,60 @@ class ClassificationResult(BaseModel):
         return cleaned
 
 
-class EntityNormalizationInput(BaseModel):
+class NormalizedEntity(BaseModel):
     """
-    Input schema for entity normalization agent tool.
+    Represents a single normalized entity with its original form and normalization metadata.
 
-    This model defines the contract for the entity_normalizer tool that can be
-    called by classification agents to normalize entity names during classification.
+    This model is used to preserve both the original entity name (as extracted from article)
+    and its normalized canonical form (for deduplication) when storing entities in the database.
 
-    The normalization tool uses AI to convert raw entity names (with titles, variations,
-    etc.) into canonical forms with underscores for consistency across articles.
+    This is the individual entity object that's part of EntityNormalizationResult.normalized_entities
+    array. Each entity has its own confidence score and reasoning.
+
+    Workflow Position:
+        Orchestration → EntityNormalizer → list[**NormalizedEntity**] → Persistence
+
+    Mapping to Database (Entity model):
+        - NormalizedEntity.original_value → Entity.name (display name)
+        - NormalizedEntity.normalized_value → Entity.normalized_name (canonical form for deduplication)
+        - NormalizedEntity.confidence → Not stored (used for quality tracking/debugging)
+        - NormalizedEntity.reason → Not stored (used for transparency/debugging)
 
     Example:
-        >>> input_data = EntityNormalizationInput(
-        ...     entity_names=["Hon. Ruel Reid", "OCG", "Min. of Education"],
-        ...     article_context="corruption investigation"
-        ... )
-        >>> # Agent tool will normalize these to: ["ruel_reid", "ocg", "ministry_of_education"]
-    """
-
-    entity_names: list[str] = Field(
-        ...,
-        description="List of raw entity names to normalize"
-    )
-    article_context: str = Field(
-        default="",
-        description="Context about the article (optional)"
-    )
-
-    model_config = ConfigDict(from_attributes=True)
-
-    @field_validator('entity_names')
-    @classmethod
-    def validate_entity_names(cls, v: list[str]) -> list[str]:
-        """Validate and clean entity names list."""
-        if not v:
-            raise ValueError('entity_names cannot be empty')
-
-        # Strip whitespace from each entity and filter out empty strings
-        cleaned = [name.strip() for name in v if name and name.strip()]
-
-        if not cleaned:
-            raise ValueError('entity_names must contain at least one non-empty name')
-
-        return cleaned
-
-
-class EntityNormalizationResult(BaseModel):
-    """
-    Output schema for entity normalization agent tool.
-
-    This model represents the structured result returned by the entity_normalizer
-    tool after normalizing a list of entity names. It provides a mapping from
-    original names to normalized forms, along with confidence and notes.
-
-    Normalization Rules Applied:
-        - Lowercase everything
-        - Remove titles (Mr., Hon., Minister, etc.)
-        - Replace spaces with underscores
-        - Preserve full names for people (e.g., "ruel_reid" not "reid")
-        - Preserve acronyms (e.g., "OCG" → "ocg")
-        - Standardize government entities
-
-    Example:
-        >>> result = EntityNormalizationResult(
-        ...     normalized_entities={
-        ...         "Hon. Ruel Reid": "ruel_reid",
-        ...         "OCG": "ocg",
-        ...         "Ministry of Education": "ministry_of_education"
-        ...     },
+        >>> entity = NormalizedEntity(
+        ...     original_value="Hon. Ruel Reid",
+        ...     normalized_value="ruel_reid",
         ...     confidence=0.95,
-        ...     notes="All entities normalized successfully",
-        ...     model_name="gpt-5-nano"
+        ...     reason="Removed title 'Hon.' and standardized format",
+        ...     context=""
         ... )
-        >>> result.normalized_entities["Hon. Ruel Reid"]
+        >>> entity.original_value
+        'Hon. Ruel Reid'
+        >>> entity.normalized_value
         'ruel_reid'
-        >>> result.confidence
-        0.95
     """
 
-    normalized_entities: dict[str, str] = Field(
+    original_value: str = Field(
         ...,
-        description="Mapping of original name → normalized name"
+        description="Original entity name as extracted from article"
+    )
+    normalized_value: str = Field(
+        ...,
+        description="Normalized canonical form for deduplication"
     )
     confidence: float = Field(
         ...,
         ge=0.0,
         le=1.0,
-        description="Overall confidence score"
+        description="Confidence in normalization (0.0-1.0)"
     )
-    notes: str = Field(
-        default="",
-        description="Additional notes about normalization"
-    )
-    model_name: str = Field(
+    reason: str = Field(
         ...,
-        description="Model used for normalization"
+        description="Explanation of normalization applied"
+    )
+    context: str = Field(
+        default="",
+        description="Optional context for normalization"
     )
 
     model_config = ConfigDict(from_attributes=True)
@@ -306,27 +265,63 @@ class EntityNormalizationResult(BaseModel):
             raise ValueError('Confidence must be between 0.0 and 1.0')
         return v
 
-    @field_validator('notes')
+    @field_validator('original_value', 'normalized_value', 'reason')
     @classmethod
-    def validate_notes(cls, v: str) -> str:
-        """Strip whitespace from notes."""
+    def validate_non_empty_strings(cls, v: str) -> str:
+        """Validate that required string fields are not empty."""
+        if not v or not v.strip():
+            raise ValueError('Field cannot be empty')
+        return v.strip()
+
+    @field_validator('context')
+    @classmethod
+    def validate_context(cls, v: str) -> str:
+        """Strip whitespace from context (can be empty)."""
         return v.strip() if v else ""
 
-    @field_validator('normalized_entities')
-    @classmethod
-    def validate_normalized_entities(cls, v: dict[str, str]) -> dict[str, str]:
-        """Validate and clean normalized entities mapping."""
-        if not isinstance(v, dict):
-            raise ValueError('normalized_entities must be a dictionary')
 
-        # Ensure all keys and values are stripped and non-empty
-        cleaned = {}
-        for key, value in v.items():
-            if not key or not key.strip():
-                raise ValueError('normalized_entities keys cannot be empty')
-            if not value or not value.strip():
-                raise ValueError('normalized_entities values cannot be empty')
+class EntityNormalizationResult(BaseModel):
+    """
+    Output schema for entity normalization agent.
 
-            cleaned[key.strip()] = value.strip()
+    This model represents the structured result returned by the entity_normalizer
+    agent after normalizing a list of entity names. It provides per-entity metadata
+    including original value, normalized value, confidence, and reasoning.
 
-        return cleaned
+    Normalization Rules Applied:
+        - Lowercase everything
+        - Remove titles (Mr., Hon., Minister, etc.)
+        - Replace spaces with underscores
+        - Preserve full names for people (e.g., "ruel_reid" not "reid")
+        - Preserve acronyms (e.g., "OCG" → "ocg")
+        - Standardize government entities
+
+    Example:
+        >>> result = EntityNormalizationResult(
+        ...     normalized_entities=[
+        ...         NormalizedEntity(
+        ...             original_value="Hon. Ruel Reid",
+        ...             normalized_value="ruel_reid",
+        ...             confidence=0.95,
+        ...             reason="Removed title 'Hon.' and standardized format",
+        ...             context=""
+        ...         )
+        ...     ],
+        ...     model_name="gpt-5-nano"
+        ... )
+        >>> result.normalized_entities[0].normalized_value
+        'ruel_reid'
+        >>> result.normalized_entities[0].confidence
+        0.95
+    """
+
+    normalized_entities: list[NormalizedEntity] = Field(
+        ...,
+        description="List of normalized entities with per-entity metadata"
+    )
+    model_name: str = Field(
+        ...,
+        description="Model used for normalization"
+    )
+
+    model_config = ConfigDict(from_attributes=True)

@@ -2,7 +2,7 @@
 from typing import Protocol
 import asyncpg
 from src.article_extractor.models import ExtractedArticleContent
-from src.article_classification.models import ClassificationResult
+from src.article_classification.models import ClassificationResult, NormalizedEntity
 from .models.domain import ArticleStorageResult
 
 
@@ -33,6 +33,7 @@ class ArticlePersistenceService(Protocol):
         url: str,
         section: str,
         relevant_classifications: list[ClassificationResult],
+        normalized_entities: list[NormalizedEntity],
         news_source_id: int = 1,
     ) -> ArticleStorageResult:
         """
@@ -47,6 +48,7 @@ class ArticlePersistenceService(Protocol):
             url: Original article URL
             section: Article section (e.g., "news", "lead-stories")
             relevant_classifications: List of relevant classification results
+            normalized_entities: List of normalized entities with original/normalized pairs
             news_source_id: Database ID of news source (default: 1 for Jamaica Gleaner)
 
         Returns:

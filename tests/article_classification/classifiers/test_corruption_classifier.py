@@ -1,10 +1,9 @@
 """Tests for CorruptionClassifierAdapter."""
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from src.article_classification.agents.corruption_classifier import (
+from src.article_classification.classifiers.corruption_classifier import (
     CorruptionClassifier,
 )
 from src.article_classification.models import (
@@ -352,13 +351,13 @@ def mock_session_service(mock_session: Mock) -> AsyncMock:
 
 @pytest.fixture
 def mock_final_event() -> Mock:
-    """Mock final response event with valid JSON and normalized entities."""
+    """Mock final response event with valid JSON and original entity names."""
     event = Mock()
     event.is_final_response = Mock(return_value=True)
     event.content = Mock()
     event.content.parts = [
         Mock(
-            text='{"is_relevant": true, "confidence": 0.9, "reasoning": "OCG investigation", "key_entities": ["ocg", "ministry_of_education"], "classifier_type": "CORRUPTION", "model_name": "gpt-5-nano"}'
+            text='{"is_relevant": true, "confidence": 0.9, "reasoning": "OCG investigation", "key_entities": ["OCG", "Ministry of Education"], "classifier_type": "CORRUPTION", "model_name": "gpt-5-nano"}'
         )
     ]
     event.actions = None

@@ -11,7 +11,7 @@ from src.article_classification.models import (
     ClassificationResult,
     ClassifierType,
 )
-from src.article_classification.agents.corruption_classifier import (
+from src.article_classification.classifiers.corruption_classifier import (
     CorruptionClassifier,
 )
 

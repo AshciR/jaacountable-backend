@@ -10,8 +10,8 @@ from src.article_classification.models import (
     ClassificationInput,
     ClassificationResult,
 )
-from .corruption_agent import corruption_classifier
-from ..base import APP_NAME
+from src.article_classification.agents.corruption_agent import corruption_classifier
+from src.article_classification.base import APP_NAME
 
 
 class CorruptionClassifier:

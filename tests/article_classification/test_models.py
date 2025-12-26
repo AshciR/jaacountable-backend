@@ -8,6 +8,7 @@ from src.article_classification.models import (
     ClassificationInput,
     ClassifierType,
     ClassificationResult,
+    NormalizedEntity,
 )
 
 
@@ -892,3 +893,261 @@ class TestClassificationResultValidation:
         assert len(result.reasoning) > 1000
         # Validator strips whitespace, so compare with stripped version
         assert result.reasoning == very_long_reasoning.strip()
+
+
+class TestNormalizedEntityValidation:
+    """Validation tests for NormalizedEntity model (BDD style)."""
+
+    # Happy path tests
+
+    async def test_valid_normalized_entity_succeeds(self):
+        # Given: Valid normalized entity data
+        # When: Creating NormalizedEntity
+        # Then: Entity is created successfully with all fields
+        entity = NormalizedEntity(
+            original_value="Hon. Ruel Reid",
+            normalized_value="ruel_reid",
+            confidence=0.95,
+            reason="Removed title 'Hon.' and standardized format",
+            context=""
+        )
+
+        assert entity.original_value == "Hon. Ruel Reid"
+        assert entity.normalized_value == "ruel_reid"
+        assert entity.confidence == 0.95
+        assert entity.reason == "Removed title 'Hon.' and standardized format"
+        assert entity.context == ""
+
+    async def test_normalized_entity_with_context_succeeds(self):
+        # Given: Normalized entity with optional context
+        # When: Creating NormalizedEntity
+        # Then: Entity is created with context preserved
+        entity = NormalizedEntity(
+            original_value="OCG",
+            normalized_value="ocg",
+            confidence=1.0,
+            reason="Lowercased acronym",
+            context="corruption investigation"
+        )
+
+        assert entity.context == "corruption investigation"
+
+    async def test_normalized_entity_strips_whitespace(self):
+        # Given: Normalized entity with extra whitespace in fields
+        # When: Creating NormalizedEntity
+        # Then: Whitespace is stripped from string fields
+        entity = NormalizedEntity(
+            original_value="  Hon. Andrew Holness  ",
+            normalized_value="  andrew_holness  ",
+            confidence=0.90,
+            reason="  Removed title and standardized  ",
+            context="  prime minister  "
+        )
+
+        assert entity.original_value == "Hon. Andrew Holness"
+        assert entity.normalized_value == "andrew_holness"
+        assert entity.reason == "Removed title and standardized"
+        assert entity.context == "prime minister"
+
+    # Confidence validation tests
+
+    async def test_confidence_at_minimum_succeeds(self):
+        # Given: Confidence exactly 0.0
+        # When: Creating NormalizedEntity
+        # Then: Entity is created successfully
+        entity = NormalizedEntity(
+            original_value="Test",
+            normalized_value="test",
+            confidence=0.0,
+            reason="Test normalization"
+        )
+
+        assert entity.confidence == 0.0
+
+    async def test_confidence_at_maximum_succeeds(self):
+        # Given: Confidence exactly 1.0
+        # When: Creating NormalizedEntity
+        # Then: Entity is created successfully
+        entity = NormalizedEntity(
+            original_value="OCG",
+            normalized_value="ocg",
+            confidence=1.0,
+            reason="Perfect match"
+        )
+
+        assert entity.confidence == 1.0
+
+    async def test_confidence_below_zero_raises_error(self):
+        # Given: Confidence below 0.0
+        # When: Creating NormalizedEntity
+        # Then: ValidationError raised
+        with pytest.raises(ValidationError):
+            NormalizedEntity(
+                original_value="Test",
+                normalized_value="test",
+                confidence=-0.1,
+                reason="test"
+            )
+
+    async def test_confidence_above_one_raises_error(self):
+        # Given: Confidence above 1.0
+        # When: Creating NormalizedEntity
+        # Then: ValidationError raised
+        with pytest.raises(ValidationError):
+            NormalizedEntity(
+                original_value="Test",
+                normalized_value="test",
+                confidence=1.1,
+                reason="test"
+            )
+
+    # Empty field validation tests
+
+    async def test_empty_original_value_raises_error(self):
+        # Given: Empty original_value
+        # When: Creating NormalizedEntity
+        # Then: ValidationError raised
+        with pytest.raises(ValidationError, match="Field cannot be empty"):
+            NormalizedEntity(
+                original_value="",
+                normalized_value="test",
+                confidence=0.9,
+                reason="test"
+            )
+
+    async def test_whitespace_only_original_value_raises_error(self):
+        # Given: Whitespace-only original_value
+        # When: Creating NormalizedEntity
+        # Then: ValidationError raised
+        with pytest.raises(ValidationError, match="Field cannot be empty"):
+            NormalizedEntity(
+                original_value="   ",
+                normalized_value="test",
+                confidence=0.9,
+                reason="test"
+            )
+
+    async def test_empty_normalized_value_raises_error(self):
+        # Given: Empty normalized_value
+        # When: Creating NormalizedEntity
+        # Then: ValidationError raised
+        with pytest.raises(ValidationError, match="Field cannot be empty"):
+            NormalizedEntity(
+                original_value="Test",
+                normalized_value="",
+                confidence=0.9,
+                reason="test"
+            )
+
+    async def test_whitespace_only_normalized_value_raises_error(self):
+        # Given: Whitespace-only normalized_value
+        # When: Creating NormalizedEntity
+        # Then: ValidationError raised
+        with pytest.raises(ValidationError, match="Field cannot be empty"):
+            NormalizedEntity(
+                original_value="Test",
+                normalized_value="   ",
+                confidence=0.9,
+                reason="test"
+            )
+
+    async def test_empty_reason_raises_error(self):
+        # Given: Empty reason
+        # When: Creating NormalizedEntity
+        # Then: ValidationError raised
+        with pytest.raises(ValidationError, match="Field cannot be empty"):
+            NormalizedEntity(
+                original_value="Test",
+                normalized_value="test",
+                confidence=0.9,
+                reason=""
+            )
+
+    async def test_whitespace_only_reason_raises_error(self):
+        # Given: Whitespace-only reason
+        # When: Creating NormalizedEntity
+        # Then: ValidationError raised
+        with pytest.raises(ValidationError, match="Field cannot be empty"):
+            NormalizedEntity(
+                original_value="Test",
+                normalized_value="test",
+                confidence=0.9,
+                reason="   "
+            )
+
+    async def test_empty_context_succeeds(self):
+        # Given: Empty context (optional field)
+        # When: Creating NormalizedEntity
+        # Then: Entity is created successfully with empty context
+        entity = NormalizedEntity(
+            original_value="Test",
+            normalized_value="test",
+            confidence=0.9,
+            reason="test normalization",
+            context=""
+        )
+
+        assert entity.context == ""
+
+    async def test_missing_context_uses_default(self):
+        # Given: NormalizedEntity without context parameter
+        # When: Creating NormalizedEntity
+        # Then: Context defaults to empty string
+        entity = NormalizedEntity(
+            original_value="Test",
+            normalized_value="test",
+            confidence=0.9,
+            reason="test normalization"
+        )
+
+        assert entity.context == ""
+
+    # Edge case tests
+
+    async def test_unicode_entities_preserved(self):
+        # Given: Entity with Unicode characters
+        # When: Creating NormalizedEntity
+        # Then: Unicode is preserved in both original and normalized
+        entity = NormalizedEntity(
+            original_value="Négril Tourism Board",
+            normalized_value="négril_tourism_board",
+            confidence=0.85,
+            reason="Preserved diacritics",
+            context="tourism"
+        )
+
+        assert "Négril" in entity.original_value
+        assert "négril" in entity.normalized_value
+
+    async def test_very_long_entity_names_succeed(self):
+        # Given: Very long entity names (200+ characters)
+        # When: Creating NormalizedEntity
+        # Then: Entity is created successfully with no length limits
+        long_original = "The Ministry of Tourism and Entertainment of Jamaica and the Caribbean Region " * 3  # ~240 chars
+        long_normalized = "ministry_of_tourism_and_entertainment_of_jamaica_and_the_caribbean_region"
+
+        entity = NormalizedEntity(
+            original_value=long_original,
+            normalized_value=long_normalized,
+            confidence=0.75,
+            reason="Very long entity name standardized"
+        )
+
+        assert len(entity.original_value) > 200
+        assert entity.original_value == long_original.strip()
+
+    async def test_very_long_reason_succeeds(self):
+        # Given: Very long reason (500+ characters)
+        # When: Creating NormalizedEntity
+        # Then: Entity is created successfully
+        long_reason = "Applied comprehensive normalization rules including title removal, case standardization, space replacement, and entity type classification. " * 5  # ~700 chars
+
+        entity = NormalizedEntity(
+            original_value="Test",
+            normalized_value="test",
+            confidence=0.9,
+            reason=long_reason
+        )
+
+        assert len(entity.reason) > 500
+        assert entity.reason == long_reason.strip()
