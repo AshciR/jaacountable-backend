@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 import requests
 
 from src.article_extractor.extractors.gleaner_extractor import GleanerExtractor
+from src.article_extractor.extractors.gleaner_archive_extractor import GleanerArchiveExtractor
 from .base import ArticleExtractor
 from .models import ExtractedArticleContent
 
@@ -20,6 +21,7 @@ class DefaultArticleExtractionService:
 
     Supported domains (Phase 1):
     - jamaica-gleaner.com (via GleanerExtractor - updated December 2025)
+    - gleaner.newspaperarchive.com (via GleanerArchiveExtractor - historical archives)
 
     Example:
         service = DefaultArticleExtractionService()
@@ -41,6 +43,7 @@ class DefaultArticleExtractionService:
         # Note: Domain keys should NOT include 'www.' prefix
         self.extractors = {
             "jamaica-gleaner.com": GleanerExtractor(),
+            "gleaner.newspaperarchive.com": GleanerArchiveExtractor(),
             # Phase 2: Add Radio Jamaica extractor
             # 'radiojamaicanewsonline.com': RadioJamaicaExtractor(),
         }
