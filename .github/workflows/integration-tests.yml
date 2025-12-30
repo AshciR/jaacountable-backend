@@ -30,3 +30,4 @@ jobs:
         run: uv run pytest tests/ -v --log-cli-level=INFO -n auto --dist loadfile -m integration --force-sugar
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_CI }}
+          OPENAI_EXTRACTOR_API_KEY: ${{ secrets.OPENAI_CI }}

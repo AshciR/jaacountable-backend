@@ -1,5 +1,4 @@
 """Tests for GleanerArchiveExtractor (newspaper archive OCR extraction)."""
-import pytest
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
