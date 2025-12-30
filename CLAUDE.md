@@ -82,6 +82,116 @@ articles = await discoverer.discover(news_source_id=1)
 - Unit tests: `tests/article_discovery/discoverers/test_gleaner_rss_discoverer.py` (21 tests)
 - Validation script: `scripts/validate_rss_discovery.py`
 
+### Archive Discovery System
+
+The archive discovery system uses date range-based discovery to find historical articles from newspaper archives (gleaner.newspaperarchive.com). It supports month-based discovery with parallel processing for improved performance.
+
+**Key Features:**
+- **Date Range Discovery**: Process articles by date ranges (days, months)
+- **Month-Year Factory**: Convenient `for_month()` factory method for discovering entire months
+- **Pagination Support**: Follows `<link rel="next">` tags to discover all pages per date
+- **Respectful Crawling**: Configurable crawl delay between requests (default: 2 seconds)
+- **Fail-Soft Error Handling**: Continues processing remaining dates if one fails
+- **Retry Logic**: Exponential backoff for network failures
+- **Parallel Processing**: External parallelization support via multiple workers
+
+**Components:**
+- `GleanerArchiveDiscoverer`: Main discoverer class for archive pages
+- `deduplicate_discovered_articles()`: Helper function for cross-worker deduplication (in `utils.py`)
+
+**Usage Examples:**
+
+**Standard date range:**
+```python
+from datetime import datetime, timezone
+from src.article_discovery.discoverers.gleaner_archive_discoverer import (
+    GleanerArchiveDiscoverer,
+)
+
+# Discover last 7 days
+discoverer = GleanerArchiveDiscoverer(
+    end_date=datetime(2021, 11, 23, tzinfo=timezone.utc),
+    days_back=7
+)
+articles = await discoverer.discover(news_source_id=1)
+```
+
+**Month-year discovery:**
+```python
+# Discover entire month (November 2021)
+discoverer = GleanerArchiveDiscoverer.for_month(
+    year=2021,
+    month=11
+)
+articles = await discoverer.discover(news_source_id=1)
+```
+
+**Parallel multi-month discovery:**
+```python
+# Discover 3 months in parallel using 3 workers
+import asyncio
+from src.article_discovery.utils import deduplicate_discovered_articles
+
+async def discover_month(year, month, news_source_id):
+    discoverer = GleanerArchiveDiscoverer.for_month(
+        year=year, month=month
+    )
+    return await discoverer.discover(news_source_id=news_source_id)
+
+# Run 3 workers in parallel
+results = await asyncio.gather(
+    discover_month(2021, 9, 1),  # September
+    discover_month(2021, 10, 1), # October
+    discover_month(2021, 11, 1), # November
+)
+
+# Combine and deduplicate
+all_articles = results[0] + results[1] + results[2]
+unique_articles = deduplicate_discovered_articles(all_articles)
+```
+
+**Performance:**
+- Sequential: ~30 seconds per date (20 pages × 2s delay + network)
+- Month discovery: ~15-16 minutes for 30-day month (sequential)
+- Parallel (3 workers): ~15-16 minutes for 3 months (3× speedup vs ~45-48 minutes sequential)
+- Parallel (4 workers): ~45-48 minutes for 12 months (4× speedup vs ~3 hours sequential)
+
+**Important Design Notes:**
+- Factory method validates year (1900-3000) and month (1-12) ranges
+- Date ranges are inclusive (first day to last day of month at midnight UTC)
+- Each worker respects `crawl_delay` independently (no rate limit violations)
+- Deduplication happens within each worker AND across workers
+- No database interaction during discovery (only `news_source_id` passed through)
+- Crawl delay is intentional for respectful crawling - parallelization is the only way to achieve speedup
+
+**Scripts:**
+- `scripts/parallel_archive_discovery.py` - CLI tool for parallel month discovery
+
+**Usage:**
+```bash
+# Discover 3 months (Sep-Nov 2021) using 3 workers
+uv run python scripts/parallel_archive_discovery.py \
+    --year 2021 \
+    --start-month 9 \
+    --end-month 11 \
+    --workers 3
+
+# Discover with custom crawl delay
+uv run python scripts/parallel_archive_discovery.py \
+    --year 2021 \
+    --start-month 1 \
+    --end-month 12 \
+    --workers 4 \
+    --crawl-delay 1.0
+```
+
+**Testing:**
+- Unit tests: `tests/article_discovery/discoverers/test_gleaner_archive_discoverer.py` (26 tests total)
+  - 19 tests for core functionality
+  - 7 tests for `for_month()` factory method
+- Unit tests: `tests/article_discovery/test_utils.py` (4 tests for deduplication)
+- Integration test: `tests/article_discovery/discoverers/test_gleaner_archive_discoverer_integration.py`
+
 ### Dependencies
 
 **Agent System:**
