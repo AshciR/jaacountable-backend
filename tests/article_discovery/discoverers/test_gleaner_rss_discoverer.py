@@ -1,9 +1,9 @@
 """Tests for GleanerRssFeedDiscoverer."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
+import httpx
 import pytest
-import requests
 
 from src.article_discovery.discoverers.gleaner_rss_discoverer import GleanerRssFeedDiscoverer
 from src.article_discovery.models import DiscoveredArticle, RssFeedConfig
@@ -94,12 +94,15 @@ class TestGleanerRssFeedDiscovererHappyPath:
     """Test successful RSS discovery scenarios."""
 
     @pytest.mark.asyncio
-    @patch('requests.get')
-    async def test_discover_returns_discovered_articles(self, mock_get):
+    @patch('httpx.AsyncClient')
+    async def test_discover_returns_discovered_articles(self, mock_async_client):
         # Given: A valid RSS feed URL and news source ID
+        mock_client_instance = AsyncMock()
         mock_response = Mock()
         mock_response.content = REAL_GLEANER_RSS_FEED
-        mock_get.return_value = mock_response
+        mock_client_instance.get = AsyncMock(return_value=mock_response)
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+        mock_async_client.return_value.__aexit__.return_value = AsyncMock()
 
         feed_configs = [RssFeedConfig(url="https://example.com/feed.xml", section="lead-stories")]
         discoverer = GleanerRssFeedDiscoverer(feed_configs=feed_configs)
@@ -114,12 +117,15 @@ class TestGleanerRssFeedDiscovererHappyPath:
         assert all(isinstance(a, DiscoveredArticle) for a in articles)
 
     @pytest.mark.asyncio
-    @patch('requests.get')
-    async def test_discovered_articles_use_parameterized_section(self, mock_get):
+    @patch('httpx.AsyncClient')
+    async def test_discovered_articles_use_parameterized_section(self, mock_async_client):
         # Given: RSS discoverer with custom section name
+        mock_client_instance = AsyncMock()
         mock_response = Mock()
         mock_response.content = REAL_GLEANER_RSS_FEED
-        mock_get.return_value = mock_response
+        mock_client_instance.get = AsyncMock(return_value=mock_response)
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+        mock_async_client.return_value.__aexit__.return_value = AsyncMock()
 
         feed_configs = [RssFeedConfig(url="https://example.com/feed.xml", section="custom-section")]
         discoverer = GleanerRssFeedDiscoverer(feed_configs=feed_configs)
@@ -132,12 +138,15 @@ class TestGleanerRssFeedDiscovererHappyPath:
         assert all(a.section == "custom-section" for a in articles)
 
     @pytest.mark.asyncio
-    @patch('requests.get')
-    async def test_discovered_articles_have_required_fields(self, mock_get):
+    @patch('httpx.AsyncClient')
+    async def test_discovered_articles_have_required_fields(self, mock_async_client):
         # Given: A valid RSS feed
+        mock_client_instance = AsyncMock()
         mock_response = Mock()
         mock_response.content = REAL_GLEANER_RSS_FEED
-        mock_get.return_value = mock_response
+        mock_client_instance.get = AsyncMock(return_value=mock_response)
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+        mock_async_client.return_value.__aexit__.return_value = AsyncMock()
 
         feed_configs = [RssFeedConfig(url="https://example.com/feed.xml", section="lead-stories")]
         discoverer = GleanerRssFeedDiscoverer(feed_configs=feed_configs)
@@ -154,12 +163,15 @@ class TestGleanerRssFeedDiscovererHappyPath:
             assert article.discovered_at.tzinfo is not None  # Timezone-aware
 
     @pytest.mark.asyncio
-    @patch('requests.get')
-    async def test_discovered_articles_have_optional_fields_populated(self, mock_get):
+    @patch('httpx.AsyncClient')
+    async def test_discovered_articles_have_optional_fields_populated(self, mock_async_client):
         # Given: A valid RSS feed with title and published_date
+        mock_client_instance = AsyncMock()
         mock_response = Mock()
         mock_response.content = REAL_GLEANER_RSS_FEED
-        mock_get.return_value = mock_response
+        mock_client_instance.get = AsyncMock(return_value=mock_response)
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+        mock_async_client.return_value.__aexit__.return_value = AsyncMock()
 
         feed_configs = [RssFeedConfig(url="https://example.com/feed.xml", section="lead-stories")]
         discoverer = GleanerRssFeedDiscoverer(feed_configs=feed_configs)
@@ -175,12 +187,15 @@ class TestGleanerRssFeedDiscovererHappyPath:
             assert article.published_date.tzinfo is not None  # Timezone-aware
 
     @pytest.mark.asyncio
-    @patch('requests.get')
-    async def test_discover_parses_first_article_metadata_correctly(self, mock_get):
+    @patch('httpx.AsyncClient')
+    async def test_discover_parses_first_article_metadata_correctly(self, mock_async_client):
         # Given: RSS feed with known data
+        mock_client_instance = AsyncMock()
         mock_response = Mock()
         mock_response.content = REAL_GLEANER_RSS_FEED
-        mock_get.return_value = mock_response
+        mock_client_instance.get = AsyncMock(return_value=mock_response)
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+        mock_async_client.return_value.__aexit__.return_value = AsyncMock()
 
         feed_configs = [RssFeedConfig(url="https://example.com/feed.xml", section="lead-stories")]
         discoverer = GleanerRssFeedDiscoverer(feed_configs=feed_configs)
@@ -196,12 +211,15 @@ class TestGleanerRssFeedDiscovererHappyPath:
         assert first_article.news_source_id == 1
 
     @pytest.mark.asyncio
-    @patch('requests.get')
-    async def test_discover_parses_second_article_metadata_correctly(self, mock_get):
+    @patch('httpx.AsyncClient')
+    async def test_discover_parses_second_article_metadata_correctly(self, mock_async_client):
         # Given: RSS feed with known data
+        mock_client_instance = AsyncMock()
         mock_response = Mock()
         mock_response.content = REAL_GLEANER_RSS_FEED
-        mock_get.return_value = mock_response
+        mock_client_instance.get = AsyncMock(return_value=mock_response)
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+        mock_async_client.return_value.__aexit__.return_value = AsyncMock()
 
         feed_configs = [RssFeedConfig(url="https://example.com/feed.xml", section="lead-stories")]
         discoverer = GleanerRssFeedDiscoverer(feed_configs=feed_configs)
@@ -217,8 +235,8 @@ class TestGleanerRssFeedDiscovererHappyPath:
         assert second_article.news_source_id == 1
 
     @pytest.mark.asyncio
-    @patch('requests.get')
-    async def test_discover_deduplicates_articles_by_url(self, mock_get):
+    @patch('httpx.AsyncClient')
+    async def test_discover_deduplicates_articles_by_url(self, mock_async_client):
         # Given: RSS feed with duplicate URLs
         duplicate_feed = b'''<?xml version="1.0" encoding="utf-8"?>
         <rss xmlns:dc="http://purl.org/dc/elements/1.1/" version="2.0">
@@ -241,9 +259,12 @@ class TestGleanerRssFeedDiscovererHappyPath:
                 </item>
             </channel>
         </rss>'''
+        mock_client_instance = AsyncMock()
         mock_response = Mock()
         mock_response.content = duplicate_feed
-        mock_get.return_value = mock_response
+        mock_client_instance.get = AsyncMock(return_value=mock_response)
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+        mock_async_client.return_value.__aexit__.return_value = AsyncMock()
 
         feed_configs = [RssFeedConfig(url="https://example.com/feed.xml", section="lead-stories")]
         discoverer = GleanerRssFeedDiscoverer(feed_configs=feed_configs)
@@ -305,17 +326,20 @@ class TestGleanerRssFeedDiscovererNetworkErrors:
         assert articles == []
 
     @pytest.mark.asyncio
-    @patch('requests.get')
-    async def test_discover_retries_on_network_failure(self, mock_get):
+    @patch('httpx.AsyncClient')
+    async def test_discover_retries_on_network_failure(self, mock_async_client):
         # Given: Network fails twice, then succeeds
+        mock_client_instance = AsyncMock()
         mock_response = Mock()
         mock_response.content = REAL_GLEANER_RSS_FEED
 
-        mock_get.side_effect = [
-            requests.RequestException("Network error"),
-            requests.RequestException("Network error"),
+        mock_client_instance.get = AsyncMock(side_effect=[
+            httpx.HTTPError("Network error"),
+            httpx.HTTPError("Network error"),
             mock_response
-        ]
+        ])
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+        mock_async_client.return_value.__aexit__.return_value = AsyncMock()
 
         feed_configs = [RssFeedConfig(url="https://example.com/feed.xml", section="lead-stories")]
         discoverer = GleanerRssFeedDiscoverer(
@@ -329,13 +353,16 @@ class TestGleanerRssFeedDiscovererNetworkErrors:
 
         # Then: Succeeds after retries
         assert len(articles) == 4
-        assert mock_get.call_count == 3  # Failed twice, succeeded third time
+        assert mock_client_instance.get.call_count == 3  # Failed twice, succeeded third time
 
     @pytest.mark.asyncio
-    @patch('requests.get')
-    async def test_discover_respects_max_retries(self, mock_get):
+    @patch('httpx.AsyncClient')
+    async def test_discover_respects_max_retries(self, mock_async_client):
         # Given: Network always fails
-        mock_get.side_effect = requests.RequestException("Network error")
+        mock_client_instance = AsyncMock()
+        mock_client_instance.get = AsyncMock(side_effect=httpx.HTTPError("Network error"))
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+        mock_async_client.return_value.__aexit__.return_value = AsyncMock()
 
         feed_configs = [RssFeedConfig(url="https://example.com/feed.xml", section="lead-stories")]
         discoverer = GleanerRssFeedDiscoverer(
@@ -349,16 +376,17 @@ class TestGleanerRssFeedDiscovererNetworkErrors:
 
         # Then: Returns empty list (fail-soft) and retries exactly max_retries times
         assert articles == []
-        assert mock_get.call_count == 3
+        assert mock_client_instance.get.call_count == 3
 
 
 class TestGleanerRssFeedDiscovererEdgeCases:
     """Test edge cases and unusual scenarios."""
 
     @pytest.mark.asyncio
-    @patch('requests.get')
-    async def test_discover_handles_empty_feed(self, mock_get):
+    @patch('httpx.AsyncClient')
+    async def test_discover_handles_empty_feed(self, mock_async_client):
         # Given: Empty RSS feed
+        mock_client_instance = AsyncMock()
         mock_response = Mock()
         mock_response.content = b'''<?xml version="1.0" encoding="utf-8"?>
         <rss xmlns:dc="http://purl.org/dc/elements/1.1/" version="2.0">
@@ -366,7 +394,9 @@ class TestGleanerRssFeedDiscovererEdgeCases:
                 <title>Test Feed</title>
             </channel>
         </rss>'''
-        mock_get.return_value = mock_response
+        mock_client_instance.get = AsyncMock(return_value=mock_response)
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+        mock_async_client.return_value.__aexit__.return_value = AsyncMock()
 
         feed_configs = [RssFeedConfig(url="https://example.com/feed.xml", section="lead-stories")]
         discoverer = GleanerRssFeedDiscoverer(feed_configs=feed_configs)
@@ -378,8 +408,8 @@ class TestGleanerRssFeedDiscovererEdgeCases:
         assert articles == []
 
     @pytest.mark.asyncio
-    @patch('requests.get')
-    async def test_discover_skips_entries_with_missing_url(self, mock_get):
+    @patch('httpx.AsyncClient')
+    async def test_discover_skips_entries_with_missing_url(self, mock_async_client):
         # Given: RSS feed with entry missing required 'link' field
         mock_response = Mock()
         mock_response.content = b'''<?xml version="1.0" encoding="utf-8"?>
@@ -397,7 +427,10 @@ class TestGleanerRssFeedDiscovererEdgeCases:
                 </item>
             </channel>
         </rss>'''
-        mock_get.return_value = mock_response
+        mock_client_instance = AsyncMock()
+        mock_client_instance.get = AsyncMock(return_value=mock_response)
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+        mock_async_client.return_value.__aexit__.return_value = AsyncMock()
 
         feed_configs = [RssFeedConfig(url="https://example.com/feed.xml", section="lead-stories")]
         discoverer = GleanerRssFeedDiscoverer(feed_configs=feed_configs)
@@ -411,8 +444,8 @@ class TestGleanerRssFeedDiscovererEdgeCases:
         assert articles[0].url == "http://example.com/article2"
 
     @pytest.mark.asyncio
-    @patch('requests.get')
-    async def test_discover_handles_entries_with_empty_title(self, mock_get):
+    @patch('httpx.AsyncClient')
+    async def test_discover_handles_entries_with_empty_title(self, mock_async_client):
         # Given: RSS feed with entry with empty title
         mock_response = Mock()
         mock_response.content = b'''<?xml version="1.0" encoding="utf-8"?>
@@ -426,7 +459,10 @@ class TestGleanerRssFeedDiscovererEdgeCases:
                 </item>
             </channel>
         </rss>'''
-        mock_get.return_value = mock_response
+        mock_client_instance = AsyncMock()
+        mock_client_instance.get = AsyncMock(return_value=mock_response)
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+        mock_async_client.return_value.__aexit__.return_value = AsyncMock()
 
         feed_configs = [RssFeedConfig(url="https://example.com/feed.xml", section="lead-stories")]
         discoverer = GleanerRssFeedDiscoverer(feed_configs=feed_configs)
@@ -440,8 +476,8 @@ class TestGleanerRssFeedDiscovererEdgeCases:
         assert articles[0].url == "http://example.com/article1"
 
     @pytest.mark.asyncio
-    @patch('requests.get')
-    async def test_discover_handles_entries_without_published_date(self, mock_get):
+    @patch('httpx.AsyncClient')
+    async def test_discover_handles_entries_without_published_date(self, mock_async_client):
         # Given: RSS feed with entry missing published date
         mock_response = Mock()
         mock_response.content = b'''<?xml version="1.0" encoding="utf-8"?>
@@ -454,7 +490,10 @@ class TestGleanerRssFeedDiscovererEdgeCases:
                 </item>
             </channel>
         </rss>'''
-        mock_get.return_value = mock_response
+        mock_client_instance = AsyncMock()
+        mock_client_instance.get = AsyncMock(return_value=mock_response)
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+        mock_async_client.return_value.__aexit__.return_value = AsyncMock()
 
         feed_configs = [RssFeedConfig(url="https://example.com/feed.xml", section="lead-stories")]
         discoverer = GleanerRssFeedDiscoverer(feed_configs=feed_configs)
@@ -468,12 +507,15 @@ class TestGleanerRssFeedDiscovererEdgeCases:
         assert articles[0].url == "http://example.com/article1"
 
     @pytest.mark.asyncio
-    @patch('requests.get')
-    async def test_discover_returns_empty_list_for_invalid_xml(self, mock_get):
+    @patch('httpx.AsyncClient')
+    async def test_discover_returns_empty_list_for_invalid_xml(self, mock_async_client):
         # Given: Invalid XML (not well-formed)
+        mock_client_instance = AsyncMock()
         mock_response = Mock()
         mock_response.content = b'<rss><channel><item>broken xml'
-        mock_get.return_value = mock_response
+        mock_client_instance.get = AsyncMock(return_value=mock_response)
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+        mock_async_client.return_value.__aexit__.return_value = AsyncMock()
 
         feed_configs = [RssFeedConfig(url="https://example.com/feed.xml", section="lead-stories")]
         discoverer = GleanerRssFeedDiscoverer(feed_configs=feed_configs)
@@ -485,12 +527,15 @@ class TestGleanerRssFeedDiscovererEdgeCases:
         assert articles == []
 
     @pytest.mark.asyncio
-    @patch('requests.get')
-    async def test_discover_handles_empty_dc_creator(self, mock_get):
+    @patch('httpx.AsyncClient')
+    async def test_discover_handles_empty_dc_creator(self, mock_async_client):
         # Given: Real Gleaner feed includes items with empty dc:creator
+        mock_client_instance = AsyncMock()
         mock_response = Mock()
         mock_response.content = REAL_GLEANER_RSS_FEED
-        mock_get.return_value = mock_response
+        mock_client_instance.get = AsyncMock(return_value=mock_response)
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+        mock_async_client.return_value.__aexit__.return_value = AsyncMock()
 
         feed_configs = [RssFeedConfig(url="https://example.com/feed.xml", section="lead-stories")]
         discoverer = GleanerRssFeedDiscoverer(feed_configs=feed_configs)
@@ -508,14 +553,17 @@ class TestGleanerRssFeedDiscovererMultiFeed:
     """Test multi-feed support."""
 
     @pytest.mark.asyncio
-    @patch('requests.get')
-    async def test_discover_combines_articles_from_multiple_feeds(self, mock_get):
+    @patch('httpx.AsyncClient')
+    async def test_discover_combines_articles_from_multiple_feeds(self, mock_async_client):
         # Given: Two feeds (lead-stories and news) with different articles
+        mock_client_instance = AsyncMock()
         mock_response_lead = Mock()
         mock_response_lead.content = REAL_GLEANER_RSS_FEED  # Lead stories feed (4 articles)
         mock_response_news = Mock()
         mock_response_news.content = REAL_GLEANER_NEWS_RSS_FEED  # News feed (3 articles)
-        mock_get.side_effect = [mock_response_lead, mock_response_news]
+        mock_client_instance.get = AsyncMock(side_effect=[mock_response_lead, mock_response_news])
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+        mock_async_client.return_value.__aexit__.return_value = AsyncMock()
 
         feed_configs = [
             RssFeedConfig(url="https://jamaica-gleaner.com/feed/rss.xml", section="lead-stories"),
@@ -540,12 +588,15 @@ class TestGleanerRssFeedDiscovererMultiFeed:
         assert any("diaspora-plans-christmas-support" in a.url for a in news_articles)
 
     @pytest.mark.asyncio
-    @patch('requests.get')
-    async def test_discover_deduplicates_across_feeds(self, mock_get):
+    @patch('httpx.AsyncClient')
+    async def test_discover_deduplicates_across_feeds(self, mock_async_client):
         # Given: Two feeds with the same articles (simulate overlap)
+        mock_client_instance = AsyncMock()
         mock_response = Mock()
         mock_response.content = REAL_GLEANER_RSS_FEED  # Same feed content for both
-        mock_get.side_effect = [mock_response, mock_response]
+        mock_client_instance.get = AsyncMock(side_effect=[mock_response, mock_response])
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+        mock_async_client.return_value.__aexit__.return_value = AsyncMock()
 
         feed_configs = [
             RssFeedConfig(url="https://jamaica-gleaner.com/feed/rss.xml", section="lead-stories"),
@@ -563,16 +614,19 @@ class TestGleanerRssFeedDiscovererMultiFeed:
         assert len(urls) == len(set(urls))
 
     @pytest.mark.asyncio
-    @patch('requests.get')
-    async def test_discover_continues_when_one_feed_fails(self, mock_get):
+    @patch('httpx.AsyncClient')
+    async def test_discover_continues_when_one_feed_fails(self, mock_async_client):
         # Given: First feed fails, second succeeds
+        mock_client_instance = AsyncMock()
         mock_response_news = Mock()
         mock_response_news.content = REAL_GLEANER_NEWS_RSS_FEED
 
-        mock_get.side_effect = [
-            requests.RequestException("Network error"),  # Lead stories feed fails
+        mock_client_instance.get = AsyncMock(side_effect=[
+            httpx.HTTPError("Network error"),  # Lead stories feed fails
             mock_response_news  # News feed succeeds
-        ]
+        ])
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+        mock_async_client.return_value.__aexit__.return_value = AsyncMock()
 
         feed_configs = [
             RssFeedConfig(url="https://jamaica-gleaner.com/feed/rss.xml", section="lead-stories"),

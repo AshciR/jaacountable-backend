@@ -1,11 +1,11 @@
 """RSS-based article discovery for Jamaica Gleaner."""
 
+import asyncio
 import logging
-import time
 from datetime import datetime, timezone
 from typing import Any
 import feedparser
-import requests
+import httpx
 from src.article_discovery.models import DiscoveredArticle, RssFeedConfig
 
 logger = logging.getLogger(__name__)
@@ -110,7 +110,7 @@ class GleanerRssFeedDiscoverer:
 
         return deduplicated_articles
 
-    def _fetch_feed_with_retry(self, feed_url: str) -> requests.Response:
+    async def _fetch_feed_with_retry(self, feed_url: str) -> httpx.Response:
         """
         Fetch RSS feed with exponential backoff retry logic.
 
@@ -130,20 +130,21 @@ class GleanerRssFeedDiscoverer:
                 logger.debug(
                     f"Fetching RSS feed from {feed_url} (attempt {attempt}/{self.max_retries})"
                 )
-                response = requests.get(
-                    feed_url,
-                    timeout=self.timeout,
-                    headers={
-                        "User-Agent": "JaAccountable-Bot/1.0 (Article Discovery Service)"
-                    }
-                )
-                response.raise_for_status()
-                logger.debug(
-                    f"RSS feed fetched successfully: {len(response.content)} bytes"
-                )
-                return response
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(
+                        feed_url,
+                        timeout=self.timeout,
+                        headers={
+                            "User-Agent": "JaAccountable-Bot/1.0 (Article Discovery Service)"
+                        }
+                    )
+                    response.raise_for_status()
+                    logger.debug(
+                        f"RSS feed fetched successfully: {len(response.content)} bytes"
+                    )
+                    return response
 
-            except requests.RequestException as e:
+            except httpx.HTTPError as e:
                 last_exception = e
                 logger.warning(
                     f"Failed to fetch RSS feed (attempt {attempt}/{self.max_retries}): {e}"
@@ -155,7 +156,7 @@ class GleanerRssFeedDiscoverer:
                     logger.info(
                         f"Retrying in {backoff_time:.1f} seconds..."
                     )
-                    time.sleep(backoff_time)
+                    await asyncio.sleep(backoff_time)
 
         # All retries failed
         logger.error(
@@ -182,7 +183,7 @@ class GleanerRssFeedDiscoverer:
             RuntimeError: If feed fetch/parse fails
         """
         # Fetch feed with retry logic
-        response = self._fetch_feed_with_retry(config.url)
+        response = await self._fetch_feed_with_retry(config.url)
 
         # Parse RSS feed
         logger.debug(f"Parsing RSS feed from {config.url}")
