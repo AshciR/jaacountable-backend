@@ -1,4 +1,6 @@
 """Article extraction service with strategy pattern."""
+import asyncio
+import logging
 from urllib.parse import urlparse
 
 import httpx
@@ -7,6 +9,8 @@ from src.article_extractor.extractors.gleaner_extractor import GleanerExtractor
 from src.article_extractor.extractors.gleaner_archive_extractor import GleanerArchiveExtractor
 from .base import ArticleExtractor
 from .models import ExtractedArticleContent
+
+logger = logging.getLogger(__name__)
 
 
 class DefaultArticleExtractionService:
@@ -118,30 +122,94 @@ def _parse_and_validate_url(url: str) -> str:
     return domain
 
 
-async def _fetch_html(url: str) -> str:
+async def _fetch_html(
+    url: str,
+    timeout: int = 30,
+    max_retries: int = 3,
+    base_backoff: float = 2.0,
+) -> str:
     """
-    Fetch HTML content from URL.
+    Fetch HTML content from URL with exponential backoff retry logic.
+
+    This function implements smart retry logic that only retries transient errors:
+    - 5xx server errors (500, 502, 503, 504, etc.)
+    - Network errors (timeouts, connection failures, DNS errors)
+
+    Client errors (4xx) are NOT retried as they indicate permanent failures
+    (e.g., 404 Not Found, 401 Unauthorized, 403 Forbidden).
 
     Args:
         url: Article URL
+        timeout: HTTP request timeout in seconds (default: 30)
+        max_retries: Maximum retry attempts for failed requests (default: 3)
+        base_backoff: Base for exponential backoff calculation (default: 2.0)
 
     Returns:
         Raw HTML content
 
     Raises:
-        httpx.HTTPStatusError: If HTTP request fails (4xx, 5xx)
-        httpx.HTTPError: For other network errors
+        httpx.HTTPStatusError: If HTTP request fails after all retries
+        httpx.RequestError: If network error persists after all retries
     """
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     }
 
-    # Async request with httpx.AsyncClient context manager
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers, timeout=30)
+        for attempt in range(1, max_retries + 1):
+            try:
+                response = await client.get(url, headers=headers, timeout=timeout)
 
-        # Raise exception for HTTP errors (4xx, 5xx)
-        # This will propagate to caller for handling
-        response.raise_for_status()
+                # Raise exception for HTTP errors (4xx, 5xx)
+                response.raise_for_status()
 
-        return response.text
+                # Success - return HTML content
+                return response.text
+
+            except httpx.HTTPStatusError as e:
+                # Check if this is a retryable error (5xx server error)
+                if e.response.status_code >= 500:
+                    # 5xx server error - transient, worth retrying
+                    if attempt == max_retries:
+                        logger.error(
+                            f"Failed to fetch {url} after {max_retries} retries: "
+                            f"{e.response.status_code} {e.response.reason_phrase}"
+                        )
+                        raise
+
+                    # Calculate exponential backoff: 2^1=2s, 2^2=4s, 2^3=8s
+                    backoff_time = base_backoff**attempt
+                    logger.warning(
+                        f"Attempt {attempt}/{max_retries} failed for {url} "
+                        f"({e.response.status_code} {e.response.reason_phrase}), "
+                        f"retrying in {backoff_time}s"
+                    )
+                    await asyncio.sleep(backoff_time)
+                else:
+                    # 4xx client error - permanent failure, don't retry
+                    logger.error(
+                        f"Client error fetching {url}: "
+                        f"{e.response.status_code} {e.response.reason_phrase} "
+                        f"(not retrying)"
+                    )
+                    raise
+
+            except httpx.RequestError as e:
+                # Network error (timeout, connection failure, DNS error, etc.)
+                # These are transient and worth retrying
+                if attempt == max_retries:
+                    logger.error(
+                        f"Failed to fetch {url} after {max_retries} retries: {e}"
+                    )
+                    raise
+
+                # Calculate exponential backoff
+                backoff_time = base_backoff**attempt
+                logger.warning(
+                    f"Attempt {attempt}/{max_retries} failed for {url}, "
+                    f"retrying in {backoff_time}s: {e}"
+                )
+                await asyncio.sleep(backoff_time)
+
+        # This line should never be reached, but helps type checker
+        raise RuntimeError(f"Failed to fetch {url} after {max_retries} retries")
