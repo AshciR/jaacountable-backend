@@ -1350,7 +1350,6 @@ dependencies = [
     { name = "pytest-sugar" },
     { name = "pytest-xdist" },
     { name = "python-dotenv" },
-    { name = "requests" },
     { name = "testcontainers" },
 ]
 
@@ -1373,7 +1372,6 @@ requires-dist = [
     { name = "pytest-sugar", specifier = ">=1.1.1" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
-    { name = "requests", specifier = ">=2.32.5" },
     { name = "testcontainers", extras = ["postgres"], specifier = ">=4.13.3" },
 ]
 

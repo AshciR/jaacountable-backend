@@ -67,7 +67,7 @@ class TestProcessArticleEdgeCases:
     ):
         # Given: Mock services with duplicate article
         mock_extraction = Mock(spec=ArticleExtractionService)
-        mock_extraction.extract_article_content = Mock(
+        mock_extraction.extract_article_content = AsyncMock(
             return_value=sample_extracted_content
         )
 
@@ -124,7 +124,7 @@ class TestProcessArticleEdgeCases:
     async def test_extraction_failure_returns_error_result(self):
         # Given: Mock services with extraction failure
         mock_extraction = Mock(spec=ArticleExtractionService)
-        mock_extraction.extract_article_content = Mock(
+        mock_extraction.extract_article_content = AsyncMock(
             side_effect=Exception("Failed to fetch URL: 404 Not Found")
         )
 
@@ -158,7 +158,7 @@ class TestProcessArticleEdgeCases:
     ):
         # Given: Mock services with classification failure
         mock_extraction = Mock(spec=ArticleExtractionService)
-        mock_extraction.extract_article_content = Mock(
+        mock_extraction.extract_article_content = AsyncMock(
             return_value=sample_extracted_content
         )
 
@@ -197,7 +197,7 @@ class TestProcessArticleEdgeCases:
     ):
         # Given: Mock services with storage failure
         mock_extraction = Mock(spec=ArticleExtractionService)
-        mock_extraction.extract_article_content = Mock(
+        mock_extraction.extract_article_content = AsyncMock(
             return_value=sample_extracted_content
         )
 
@@ -251,7 +251,7 @@ class TestProcessArticleEdgeCases:
     ):
         # Given: Mock services with low-confidence classification
         mock_extraction = Mock(spec=ArticleExtractionService)
-        mock_extraction.extract_article_content = Mock(
+        mock_extraction.extract_article_content = AsyncMock(
             return_value=sample_extracted_content
         )
 

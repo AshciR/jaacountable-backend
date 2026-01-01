@@ -1,7 +1,7 @@
 """Article extraction service with strategy pattern."""
 from urllib.parse import urlparse
 
-import requests
+import httpx
 
 from src.article_extractor.extractors.gleaner_extractor import GleanerExtractor
 from src.article_extractor.extractors.gleaner_archive_extractor import GleanerArchiveExtractor
@@ -48,7 +48,7 @@ class DefaultArticleExtractionService:
             # 'radiojamaicanewsonline.com': RadioJamaicaExtractor(),
         }
 
-    def extract_article_content(self, url: str) -> ExtractedArticleContent:
+    async def extract_article_content(self, url: str) -> ExtractedArticleContent:
         """
         Extract structured article content from URL.
 
@@ -60,8 +60,8 @@ class DefaultArticleExtractionService:
 
         Raises:
             ValueError: If URL is invalid or domain is not supported
-            requests.HTTPError: If HTTP request fails
-            requests.RequestException: For other network errors
+            httpx.HTTPStatusError: If HTTP request fails
+            httpx.HTTPError: For other network errors
         """
         # Parse and validate URL, extract domain
         domain = _parse_and_validate_url(url)
@@ -75,7 +75,7 @@ class DefaultArticleExtractionService:
             )
 
         # Fetch HTML content
-        html = _fetch_html(url)
+        html = await _fetch_html(url)
 
         # Execute extraction strategy
         # Note: Let extraction errors propagate (fail-fast approach)
@@ -118,7 +118,7 @@ def _parse_and_validate_url(url: str) -> str:
     return domain
 
 
-def _fetch_html(url: str) -> str:
+async def _fetch_html(url: str) -> str:
     """
     Fetch HTML content from URL.
 
@@ -129,18 +129,19 @@ def _fetch_html(url: str) -> str:
         Raw HTML content
 
     Raises:
-        requests.HTTPError: If HTTP request fails (4xx, 5xx)
-        requests.RequestException: For other network errors
+        httpx.HTTPStatusError: If HTTP request fails (4xx, 5xx)
+        httpx.HTTPError: For other network errors
     """
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     }
 
-    # Synchronous request (matches existing tools.py pattern)
-    response = requests.get(url, headers=headers, timeout=30)
+    # Async request with httpx.AsyncClient context manager
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers, timeout=30)
 
-    # Raise exception for HTTP errors (4xx, 5xx)
-    # This will propagate to caller for handling
-    response.raise_for_status()
+        # Raise exception for HTTP errors (4xx, 5xx)
+        # This will propagate to caller for handling
+        response.raise_for_status()
 
-    return response.text
+        return response.text

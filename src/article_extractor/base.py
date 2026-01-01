@@ -58,14 +58,14 @@ class ArticleExtractionService(Protocol):
 
     Example:
         class MyExtractionService:  # No inheritance needed!
-            def extract_article_content(self, url: str) -> ExtractedArticleContent:
+            async def extract_article_content(self, url: str) -> ExtractedArticleContent:
                 # Implementation here
                 pass
 
         # MyExtractionService satisfies ArticleExtractionService Protocol
     """
 
-    def extract_article_content(self, url: str) -> ExtractedArticleContent:
+    async def extract_article_content(self, url: str) -> ExtractedArticleContent:
         """
         Extract structured article content from URL.
 
@@ -77,7 +77,7 @@ class ArticleExtractionService(Protocol):
 
         Raises:
             ValueError: If URL is invalid or domain is not supported
-            requests.HTTPError: If HTTP request fails
-            requests.RequestException: For other network errors
+            httpx.HTTPStatusError: If HTTP request fails
+            httpx.HTTPError: For other network errors
         """
         ...
