@@ -128,7 +128,7 @@ class PipelineOrchestrationService:
         logger.info(f"Processing article: {url}")
 
         # Step 1: Extract article content
-        success, result = self._extract_article(url, section)
+        success, result = await self._extract_article(url, section)
         if not success:
             return result  # type: ignore
         extracted: ExtractedArticleContent = result  # type: ignore
@@ -173,7 +173,7 @@ class PipelineOrchestrationService:
             news_source_id=news_source_id,
         )
 
-    def _extract_article(
+    async def _extract_article(
         self,
         url: str,
         section: str,
@@ -191,7 +191,7 @@ class PipelineOrchestrationService:
             - On error: (False, OrchestrationResult with error)
         """
         try:
-            extracted = self.extraction_service.extract_article_content(url)
+            extracted = await self.extraction_service.extract_article_content(url)
             logger.info(f"Extracted: {extracted.title[:100]}...")
             return (True, extracted)
         except Exception as e:

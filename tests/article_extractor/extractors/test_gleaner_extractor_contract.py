@@ -10,8 +10,8 @@ one extraction strategy works with the live site.
 
 Run with: uv run pytest tests/article_extractor/test_gleaner_extractor_contract.py -m contract -v
 """
+import httpx
 import pytest
-import requests
 
 from src.article_extractor.extractors.gleaner_extractor import GleanerExtractor
 
@@ -38,13 +38,14 @@ class TestGleanerExtractorExternalContract:
         url = "https://jamaica-gleaner.com/article/news/20251213/policeman-dies-after-being-hit-bus-involved-funeral-procession-st-elizabeth"
 
         # When: Fetching and extracting content from live site
-        response = requests.get(
-            url,
-            timeout=30,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; JaacountableBot/1.0)"},
-        )
-        response.raise_for_status()
-        html = response.text
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                url,
+                timeout=30,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; JaacountableBot/1.0)"},
+            )
+            response.raise_for_status()
+            html = response.text
 
         extractor = GleanerExtractor()
         content = extractor.extract(html, url)

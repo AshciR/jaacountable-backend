@@ -121,7 +121,7 @@ class TestUnsupportedDomain:
 
         # When/Then: extracting content raises ValueError
         with pytest.raises(ValueError) as exc_info:
-            service.extract_article_content(url)
+            await service.extract_article_content(url)
 
         # Then: error message includes the unsupported domain and supported domains
         error_msg = str(exc_info.value)
@@ -136,7 +136,7 @@ class TestUnsupportedDomain:
 
         # When/Then: extracting content raises ValueError
         with pytest.raises(ValueError) as exc_info:
-            service.extract_article_content(url)
+            await service.extract_article_content(url)
 
         # Then: error message indicates unsupported domain
         error_msg = str(exc_info.value)
@@ -150,7 +150,7 @@ class TestUnsupportedDomain:
 
         # When/Then: extracting content raises ValueError with all supported domains
         with pytest.raises(ValueError) as exc_info:
-            service.extract_article_content(url)
+            await service.extract_article_content(url)
 
         error_msg = str(exc_info.value)
         # Then: error message includes all domains from extractors dict

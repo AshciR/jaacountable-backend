@@ -1,7 +1,7 @@
 """Pytest fixtures for orchestration tests."""
 import pytest
 from datetime import datetime, timezone
-from unittest.mock import Mock
+from unittest.mock import Mock, AsyncMock
 
 from src.article_extractor.models import ExtractedArticleContent
 from src.article_extractor.base import ArticleExtractionService
@@ -24,7 +24,7 @@ def sample_extracted_content() -> ExtractedArticleContent:
 def mock_extraction_service(sample_extracted_content: ExtractedArticleContent) -> Mock:
     """Mock extraction service that returns sample content."""
     service = Mock(spec=ArticleExtractionService)
-    service.extract_article_content = Mock(return_value=sample_extracted_content)
+    service.extract_article_content = AsyncMock(return_value=sample_extracted_content)
     return service
 
 

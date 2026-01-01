@@ -6,9 +6,10 @@ the current archive site structure matches our implementation expectations.
 
 Run with: uv run pytest tests/article_extractor/extractors/test_gleaner_archive_extractor_contract.py -m contract -v
 """
-import pytest
-import requests
 from datetime import datetime, timezone
+
+import httpx
+import pytest
 
 from src.article_extractor.extractors.gleaner_archive_extractor import GleanerArchiveExtractor
 
@@ -38,13 +39,14 @@ class TestGleanerArchiveExtractorExternalContract:
         url = "https://gleaner.newspaperarchive.com/kingston-gleaner/2021-11-07/page-5/"
 
         # When: Fetching and extracting content from live archive site
-        response = requests.get(
-            url,
-            timeout=30,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; JaacountableBot/1.0)"},
-        )
-        response.raise_for_status()
-        html = response.text
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                url,
+                timeout=30,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; JaacountableBot/1.0)"},
+            )
+            response.raise_for_status()
+            html = response.text
 
         extractor = GleanerArchiveExtractor()
         content = extractor.extract(html, url)
