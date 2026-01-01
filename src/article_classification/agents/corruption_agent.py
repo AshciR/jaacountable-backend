@@ -45,6 +45,29 @@ or related issues that would be relevant to government transparency tracking.
 - Sports, entertainment, weather
 - Political campaign rhetoric without specific allegations
 - Traffic accidents, robberies, general news
+- **Letters to the Editor and reader submissions** (look for salutations like "THE EDITOR, Sir:", "Dear Editor", email signatures)
+- **Editorials and opinion pieces** (look for markers like "[EDITORIAL]", "OPINION" section headers, first-person commentary)
+
+**Detecting Editorial/Opinion Content (EXCLUDE THESE):**
+
+Look for these markers indicating the article is NOT investigative journalism:
+1. **Letter to the Editor markers:**
+   - Salutations: "THE EDITOR, Sir:", "Dear Editor", "Dear Sir"
+   - Email signatures at end (e.g., "john@example.com")
+   - Letter markers: "[LETTER OF THE DAY]", "Letters to the Editor"
+
+2. **Editorial markers:**
+   - Section headers: "[EDITORIAL]", "OPINION", "COMMENTARY"
+   - Generic bylines: "The Editorial Board", "The Gleaner [EDITORIAL]"
+   - Opinion page context
+
+3. **Reader opinion patterns:**
+   - First-person reader commentary about news events
+   - Signed with reader name and contact info
+
+If you detect any of these markers, classify as **NOT RELEVANT** with low confidence (0.0-0.3),
+even if the content discusses corruption topics. We only want investigative news articles,
+not reader opinions or editorial commentary.
 
 **Output Requirements:**
 
