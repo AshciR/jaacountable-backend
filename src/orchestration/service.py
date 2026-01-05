@@ -3,8 +3,8 @@ Orchestration service for article processing pipeline.
 
 Coordinates the full workflow: Extract → Classify → Filter → Store
 """
-import logging
 import asyncpg
+from loguru import logger
 
 from src.article_extractor.models import ExtractedArticleContent
 from src.article_extractor.base import ArticleExtractionService
@@ -17,9 +17,6 @@ from src.article_classification.converters import extracted_content_to_classific
 from src.article_classification.utils import filter_relevant_classifications
 from src.article_persistence.service import PostgresArticlePersistenceService
 from .models import OrchestrationResult
-
-
-logger = logging.getLogger(__name__)
 
 
 class PipelineOrchestrationService:
@@ -169,7 +166,7 @@ class PipelineOrchestrationService:
                 relevant_classifications=relevant_results,
             )
         except Exception as e:
-            logger.error(f"Failed to normalize entities: {e}", exc_info=True)
+            logger.exception(f"Failed to normalize entities: {e}")
             # Continue without normalized entities (will be empty list)
             normalized_entities = []
 
@@ -211,7 +208,7 @@ class PipelineOrchestrationService:
             return (True, extracted)
         except Exception as e:
             error_msg = f"Failed to extract article: {e}"
-            logger.error(error_msg, exc_info=True)
+            logger.exception(error_msg)
             return (
                 False,
                 OrchestrationResult(
@@ -256,7 +253,7 @@ class PipelineOrchestrationService:
             return (True, classification_input)
         except Exception as e:
             error_msg = f"Failed to convert to classification input: {e}"
-            logger.error(error_msg, exc_info=True)
+            logger.exception(error_msg)
             return (
                 False,
                 OrchestrationResult(
@@ -308,7 +305,7 @@ class PipelineOrchestrationService:
             return (True, classification_results)
         except Exception as e:
             error_msg = f"Failed to classify article: {e}"
-            logger.error(error_msg, exc_info=True)
+            logger.exception(error_msg)
             return (
                 False,
                 OrchestrationResult(
@@ -377,7 +374,7 @@ class PipelineOrchestrationService:
             return (True, relevant_results)
         except Exception as e:
             error_msg = f"Failed to filter classifications: {e}"
-            logger.error(error_msg, exc_info=True)
+            logger.exception(error_msg)
             return (
                 False,
                 OrchestrationResult(
@@ -502,7 +499,7 @@ class PipelineOrchestrationService:
 
         except Exception as e:
             error_msg = f"Failed to store article: {e}"
-            logger.error(error_msg, exc_info=True)
+            logger.exception(error_msg)
             return OrchestrationResult(
                 url=url,
                 section=section,

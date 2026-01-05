@@ -1,7 +1,6 @@
 """Gleaner Archive article discoverer using date ranges and pagination."""
 
 import asyncio
-import logging
 import re
 from datetime import datetime, timedelta, timezone
 from calendar import monthrange
@@ -9,10 +8,9 @@ from types import SimpleNamespace
 
 import httpx
 from bs4 import BeautifulSoup
+from loguru import logger
 
 from src.article_discovery.models import DiscoveredArticle
-
-logger = logging.getLogger(__name__)
 
 
 class RedirectError(Exception):
@@ -209,7 +207,7 @@ class GleanerArchiveDiscoverer:
                     all_articles.extend(articles)
                     logger.info(f"Discovered {len(articles)} articles for {date.date()}")
                 except Exception as e:
-                    logger.error(f"Failed to discover pages for {date.date()}: {e}", exc_info=True)
+                    logger.exception(f"Failed to discover pages for {date.date()}: {e}")
                     # Continue with next date (fail-soft)
                     continue
 

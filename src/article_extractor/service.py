@@ -1,16 +1,14 @@
 """Article extraction service with strategy pattern."""
 import asyncio
-import logging
 from urllib.parse import urlparse
 
 import httpx
+from loguru import logger
 
 from src.article_extractor.extractors.gleaner_extractor import GleanerExtractor
 from src.article_extractor.extractors.gleaner_archive_extractor import GleanerArchiveExtractor
 from .base import ArticleExtractor
 from .models import ExtractedArticleContent
-
-logger = logging.getLogger(__name__)
 
 
 class DefaultArticleExtractionService:

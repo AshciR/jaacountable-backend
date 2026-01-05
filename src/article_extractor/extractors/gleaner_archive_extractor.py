@@ -7,17 +7,15 @@ than modern Gleaner articles.
 """
 
 import json
-import logging
 import os
 from datetime import datetime, timezone
 
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from litellm import completion
+from loguru import logger
 
 from src.article_extractor.models import ExtractedArticleContent
-
-logger = logging.getLogger(__name__)
 
 load_dotenv()
 EXTRACTOR_API_KEY = os.getenv("OPENAI_EXTRACTOR_API_KEY")

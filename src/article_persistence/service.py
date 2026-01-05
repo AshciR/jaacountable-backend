@@ -3,11 +3,11 @@ Article persistence service layer.
 
 Provides high-level operations for storing articles and classifications.
 """
-import logging
 import asyncpg
 from datetime import datetime, timezone
 
 from asyncpg import UniqueViolationError
+from loguru import logger
 
 from src.article_extractor.models import ExtractedArticleContent
 from src.article_classification.models import ClassificationResult, NormalizedEntity
@@ -20,9 +20,6 @@ from .repositories.article_repository import ArticleRepository
 from .repositories.classification_repository import ClassificationRepository
 from .repositories.entity_repository import EntityRepository
 from .repositories.article_entity_repository import ArticleEntityRepository
-
-
-logger = logging.getLogger(__name__)
 
 
 class PostgresArticlePersistenceService:

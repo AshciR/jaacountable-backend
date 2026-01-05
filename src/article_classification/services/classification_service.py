@@ -1,11 +1,9 @@
 """Classification service that orchestrates article classification."""
 import asyncio
-import logging
+from loguru import logger
 
 from src.article_classification.base import ArticleClassifier
 from src.article_classification.models import ClassificationInput, ClassificationResult
-
-logger = logging.getLogger(__name__)
 
 
 class ClassificationService:

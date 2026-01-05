@@ -1,10 +1,8 @@
 """Utility functions for article discovery."""
 
-import logging
+from loguru import logger
 
 from src.article_discovery.models import DiscoveredArticle
-
-logger = logging.getLogger(__name__)
 
 
 def deduplicate_discovered_articles(
