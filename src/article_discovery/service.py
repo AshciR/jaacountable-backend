@@ -1,15 +1,14 @@
 """Article discovery service for orchestrating article discovery."""
-import logging
 from datetime import datetime, timezone
 import asyncpg
+from loguru import logger
+
 from src.article_discovery.models import DiscoveredArticle
 from src.article_discovery.base import ArticleDiscoverer
 from src.article_persistence.models.domain import NewsSource
 from src.article_persistence.repositories.news_source_repository import (
     NewsSourceRepository,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class ArticleDiscoveryService:

@@ -1,14 +1,13 @@
 """RSS-based article discovery for Jamaica Gleaner."""
 
 import asyncio
-import logging
 from datetime import datetime, timezone
 from typing import Any
 import feedparser
 import httpx
-from src.article_discovery.models import DiscoveredArticle, RssFeedConfig
+from loguru import logger
 
-logger = logging.getLogger(__name__)
+from src.article_discovery.models import DiscoveredArticle, RssFeedConfig
 
 
 class GleanerRssFeedDiscoverer:
@@ -84,9 +83,8 @@ class GleanerRssFeedDiscoverer:
                 )
             except Exception as e:
                 # Fail-soft: log error but continue with other feeds
-                logger.error(
-                    f"Failed to process feed {config.url}: {type(e).__name__}: {e}",
-                    exc_info=True
+                logger.exception(
+                    f"Failed to process feed {config.url}: {type(e).__name__}: {e}"
                 )
                 continue
 
@@ -270,8 +268,7 @@ class GleanerRssFeedDiscoverer:
         logger.warning(f"  Error: {type(error).__name__}: {error}")
 
         # Log raw entry data for debugging (at debug level)
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"  Raw entry data: {entry}")
+        logger.debug(f"  Raw entry data: {entry}")
 
     def _parse_rss_entry(
         self, entry: Any, news_source_id: int, section: str

@@ -1,12 +1,9 @@
 """Article extractor for Jamaica Gleaner with automatic fallback strategy."""
-import logging
+from loguru import logger
 
 from src.article_extractor.models import ExtractedArticleContent
 from .gleaner_extractor_v1 import GleanerExtractorV1
 from .gleaner_extractor_v2 import GleanerExtractorV2
-
-
-logger = logging.getLogger(__name__)
 
 
 class GleanerExtractor:
@@ -66,24 +63,21 @@ class GleanerExtractor:
         for extractor, version, description in extractors:
             try:
                 content = extractor.extract(html, url)
-                logger.info(
-                    f"Successfully extracted using {description}",
-                    extra={"url": url, "extractor_version": version}
+                logger.bind(url=url, extractor_version=version).info(
+                    f"Successfully extracted using {description}"
                 )
                 return content
             except ValueError as error:
                 errors.append((version, error))
-                logger.warning(
-                    f"{description} failed: {error}",
-                    extra={"url": url, "extractor_version": version, "error": str(error)}
+                logger.bind(url=url, extractor_version=version, error=str(error)).warning(
+                    f"{description} failed: {error}"
                 )
                 if version == "v2":
-                    logger.info("Falling back to V1 extractor", extra={"url": url})
+                    logger.bind(url=url).info("Falling back to V1 extractor")
 
         # All extractors failed
-        logger.error(
-            "All extractors failed",
-            extra={"url": url, "errors": [(v, str(e)) for v, e in errors]}
+        logger.bind(url=url, errors=[(v, str(e)) for v, e in errors]).error(
+            "All extractors failed"
         )
         error_details = "; ".join([f"{v}: {e}" for v, e in errors])
         raise ValueError(f"All extractors failed. {error_details}")
