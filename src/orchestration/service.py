@@ -128,7 +128,11 @@ class PipelineOrchestrationService:
         logger.info(f"Processing article: {url}")
 
         # Step 1: Extract article content
-        success, result = await self._extract_article(url, section)
+        success, result = await self._extract_article(
+            extraction_service=self.extraction_service,
+            url=url,
+            section=section,
+        )
         if not success:
             return result  # type: ignore
         extracted: ExtractedArticleContent = result  # type: ignore
@@ -140,7 +144,12 @@ class PipelineOrchestrationService:
         classification_input: ClassificationInput = result  # type: ignore
 
         # Step 3: Classify article
-        success, result = await self._classify_article(classification_input, url, section)
+        success, result = await self._classify_article(
+            classification_service=self.classification_service,
+            classification_input=classification_input,
+            url=url,
+            section=section,
+        )
         if not success:
             return result  # type: ignore
         classification_results: list[ClassificationResult] = result  # type: ignore
@@ -155,7 +164,10 @@ class PipelineOrchestrationService:
 
         # Step 4.5: Normalize entities from relevant classifications
         try:
-            normalized_entities: list[NormalizedEntity] = await self._normalize_entities(relevant_results)
+            normalized_entities: list[NormalizedEntity] = await self._normalize_entities(
+                entity_normalizer=self.entity_normalizer,
+                relevant_classifications=relevant_results,
+            )
         except Exception as e:
             logger.error(f"Failed to normalize entities: {e}", exc_info=True)
             # Continue without normalized entities (will be empty list)
@@ -163,6 +175,7 @@ class PipelineOrchestrationService:
 
         # Step 5: Store article and classifications
         return await self._store_article(
+            persistence_service=self.persistence_service,
             conn=conn,
             extracted=extracted,
             url=url,
@@ -175,6 +188,7 @@ class PipelineOrchestrationService:
 
     async def _extract_article(
         self,
+        extraction_service: ArticleExtractionService,
         url: str,
         section: str,
     ) -> tuple[bool, ExtractedArticleContent | OrchestrationResult]:
@@ -182,6 +196,7 @@ class PipelineOrchestrationService:
         Extract article content from URL.
 
         Args:
+            extraction_service: Service for extracting article content
             url: Article URL to extract
             section: Article section (for error result)
 
@@ -191,7 +206,7 @@ class PipelineOrchestrationService:
             - On error: (False, OrchestrationResult with error)
         """
         try:
-            extracted = await self.extraction_service.extract_article_content(url)
+            extracted = await extraction_service.extract_article_content(url)
             logger.info(f"Extracted: {extracted.title[:100]}...")
             return (True, extracted)
         except Exception as e:
@@ -260,6 +275,7 @@ class PipelineOrchestrationService:
 
     async def _classify_article(
         self,
+        classification_service: ClassificationService,
         classification_input: ClassificationInput,
         url: str,
         section: str,
@@ -268,6 +284,7 @@ class PipelineOrchestrationService:
         Classify article using classification service.
 
         Args:
+            classification_service: Service for classifying articles
             classification_input: Classification input data
             url: Article URL (for error result)
             section: Article section (for error result)
@@ -278,7 +295,7 @@ class PipelineOrchestrationService:
             - On error: (False, OrchestrationResult with error)
         """
         try:
-            classification_results = await self.classification_service.classify(
+            classification_results = await classification_service.classify(
                 classification_input
             )
             logger.info(f"Received {len(classification_results)} classification results")
@@ -379,12 +396,14 @@ class PipelineOrchestrationService:
 
     async def _normalize_entities(
         self,
+        entity_normalizer: EntityNormalizerService,
         relevant_classifications: list[ClassificationResult],
     ) -> list[NormalizedEntity]:
         """
         Extract and normalize entities from relevant classifications.
 
         Args:
+            entity_normalizer: Service for normalizing entity names
             relevant_classifications: Classifications that passed confidence threshold
 
         Returns:
@@ -403,13 +422,14 @@ class PipelineOrchestrationService:
         logger.info(f"Normalizing {len(entity_list)} unique entities")
 
         # Normalize entities using normalizer service
-        normalized: list[NormalizedEntity] = await self.entity_normalizer.normalize(entity_list)
+        normalized: list[NormalizedEntity] = await entity_normalizer.normalize(entity_list)
 
         logger.info(f"Normalized {len(normalized)} entities")
         return normalized
 
     async def _store_article(
         self,
+        persistence_service: PostgresArticlePersistenceService,
         conn: asyncpg.Connection,
         extracted: ExtractedArticleContent,
         url: str,
@@ -423,6 +443,7 @@ class PipelineOrchestrationService:
         Store article and classifications in database.
 
         Args:
+            persistence_service: Service for storing articles and classifications
             conn: Database connection
             extracted: Extracted article content
             url: Article URL
@@ -436,7 +457,7 @@ class PipelineOrchestrationService:
             OrchestrationResult with storage outcome
         """
         try:
-            storage_result = await self.persistence_service.store_article_with_classifications(
+            storage_result = await persistence_service.store_article_with_classifications(
                 conn=conn,
                 extracted=extracted,
                 url=url,
