@@ -117,6 +117,7 @@ def configure_logging(
 
     # Suppress overly verbose third-party loggers
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)  # httpx uses httpcore internally
     logging.getLogger("asyncpg").setLevel(logging.WARNING)
     logging.getLogger("feedparser").setLevel(logging.WARNING)
 

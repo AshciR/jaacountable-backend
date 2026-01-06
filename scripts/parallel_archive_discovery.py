@@ -17,29 +17,46 @@ Usage:
 
 import argparse
 import asyncio
-import logging
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+from config.log_config import configure_logging
+from loguru import logger
 from src.article_discovery.discoverers.gleaner_archive_discoverer import (
     GleanerArchiveDiscoverer,
 )
 from src.article_discovery.models import DiscoveredArticle
 from src.article_discovery.utils import deduplicate_discovered_articles
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
-
 
 async def main():
+
+    load_dotenv()
+
     """Main entry point."""
+    # Create logs directory if it doesn't exist
+    Path("logs").mkdir(exist_ok=True)
+
+    # Configure Loguru with date-stamped log file
+    trigger_date = datetime.now().strftime("%Y-%m-%d")
+    log_file_path = f"logs/gleaner_archive_discovery_{trigger_date}.log"
+
+    # Use centralized logging configuration
+    configure_logging(
+        enable_file_logging=True,
+        log_file_path=log_file_path,
+    )
+
+    logger.info(f"Archive discovery logging to: {log_file_path}")
+
     parser = argparse.ArgumentParser(
         description="Parallel archive discovery from multiple months"
     )
@@ -107,6 +124,7 @@ async def main():
 
     # Run parallel discovery
     try:
+        start_time = time.time()
         articles = await parallel_discovery(
             year=args.year,
             start_month=args.start_month,
@@ -115,6 +133,8 @@ async def main():
             max_workers=args.workers,
             crawl_delay=args.crawl_delay,
         )
+        end_time = time.time()
+        elapsed_time = end_time - start_time
 
         # Display summary
         logger.info("=" * 70)
@@ -125,6 +145,7 @@ async def main():
         )
         logger.info(f"  Workers used: {args.workers}")
         logger.info(f"  Crawl delay: {args.crawl_delay}s")
+        logger.info(f"  Time elapsed: {elapsed_time:.2f}s ({elapsed_time/60:.2f}m)")
 
         # Per-section breakdown
         sections = {}
