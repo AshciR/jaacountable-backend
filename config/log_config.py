@@ -11,7 +11,7 @@ from loguru import logger
 
 def configure_logging(
     log_level: str | None = None,
-    enable_json: bool = False,
+    enable_json: bool | None = None,
     enable_file_logging: bool = False,
     log_file_path: str = "logs/jaacountable.log",
 ) -> None:
@@ -42,6 +42,10 @@ def configure_logging(
     # Determine log level (priority: parameter > env var > default)
     if log_level is None:
         log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+
+    # Determine enable_json (priority: parameter > env var > default)
+    if enable_json is None:
+        enable_json = os.getenv("LOG_JSON", "false").lower() in ("true", "1", "yes")
 
     # Validate log level
     valid_levels = ["TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"]
