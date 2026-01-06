@@ -3,6 +3,8 @@ Orchestration service for article processing pipeline.
 
 Coordinates the full workflow: Extract → Classify → Filter → Store
 """
+import time
+
 import asyncpg
 from loguru import logger
 
@@ -93,9 +95,7 @@ class PipelineOrchestrationService:
         """
         Process an article through the full pipeline: Extract → Classify → Store.
 
-        The method handles errors at each stage and returns a comprehensive
-        result object. Errors are logged and returned in the result rather
-        than propagated as exceptions.
+        Emits ONE canonical log line at the end with complete telemetry.
 
         Args:
             conn: Database connection (caller manages lifecycle)
@@ -122,66 +122,198 @@ class PipelineOrchestrationService:
             ...     else:
             ...         print("Article not relevant")
         """
-        logger.info(f"Processing article: {url}")
+        # Initialize telemetry dictionary for canonical log line
+        telemetry: dict[str, str | int | float] = {
+            "url": url,
+            "section": section,
+            "news_source_id": news_source_id,
+            "min_confidence": min_confidence,
+        }
 
-        # Step 1: Extract article content
-        success, result = await self._extract_article(
-            extraction_service=self.extraction_service,
-            url=url,
-            section=section,
-        )
-        if not success:
-            return result  # type: ignore
-        extracted: ExtractedArticleContent = result  # type: ignore
+        # Start total pipeline timing
+        pipeline_start = time.perf_counter()
 
-        # Step 2: Convert to classification input
-        success, result = self._convert_to_classification_input(extracted, url, section)
-        if not success:
-            return result  # type: ignore
-        classification_input: ClassificationInput = result  # type: ignore
-
-        # Step 3: Classify article
-        success, result = await self._classify_article(
-            classification_service=self.classification_service,
-            classification_input=classification_input,
-            url=url,
-            section=section,
-        )
-        if not success:
-            return result  # type: ignore
-        classification_results: list[ClassificationResult] = result  # type: ignore
-
-        # Step 4: Filter relevant classifications
-        success, result = self._filter_and_check_relevance(
-            classification_results, min_confidence, url, section
-        )
-        if not success:
-            return result  # type: ignore
-        relevant_results: list[ClassificationResult] = result  # type: ignore
-
-        # Step 4.5: Normalize entities from relevant classifications
         try:
-            normalized_entities: list[NormalizedEntity] = await self._normalize_entities(
-                entity_normalizer=self.entity_normalizer,
-                relevant_classifications=relevant_results,
+            # Step 1: Extract article content
+            extraction_start = time.perf_counter()
+            success, result = await self._extract_article(
+                extraction_service=self.extraction_service,
+                url=url,
+                section=section,
             )
-        except Exception as e:
-            logger.exception(f"Failed to normalize entities: {e}")
-            # Continue without normalized entities (will be empty list)
-            normalized_entities = []
+            telemetry["extraction_duration_ms"] = round((time.perf_counter() - extraction_start) * 1000, 2)
 
-        # Step 5: Store article and classifications
-        return await self._store_article(
-            persistence_service=self.persistence_service,
-            conn=conn,
-            extracted=extracted,
-            url=url,
-            section=section,
-            relevant_results=relevant_results,
-            classification_results=classification_results,
-            normalized_entities=normalized_entities,
-            news_source_id=news_source_id,
-        )
+            if not success:
+                telemetry.update({
+                    "extracted": False,
+                    "classified": False,
+                    "relevant": False,
+                    "stored": False,
+                    "error": result.error,  # type: ignore
+                    "error_stage": "extraction",
+                })
+                telemetry["total_duration_ms"] = round((time.perf_counter() - pipeline_start) * 1000, 2)
+                logger.bind(**telemetry).error("canonical-log-line")
+                return result  # type: ignore
+
+            extracted: ExtractedArticleContent = result  # type: ignore
+            telemetry.update({
+                "extracted": True,
+                "extracted_title": extracted.title[:100],  # Truncate to 100 chars
+            })
+
+            # Step 2: Convert to classification input
+            success, result = self._convert_to_classification_input(extracted, url, section)
+            if not success:
+                telemetry.update({
+                    "classified": False,
+                    "relevant": False,
+                    "stored": False,
+                    "error": result.error,  # type: ignore
+                    "error_stage": "conversion",
+                })
+                telemetry["total_duration_ms"] = round((time.perf_counter() - pipeline_start) * 1000, 2)
+                logger.bind(**telemetry).error("canonical-log-line")
+                return result  # type: ignore
+
+            classification_input: ClassificationInput = result  # type: ignore
+
+            # Step 3: Classify article
+            classification_start = time.perf_counter()
+            success, result = await self._classify_article(
+                classification_service=self.classification_service,
+                classification_input=classification_input,
+                url=url,
+                section=section,
+            )
+            telemetry["classification_duration_ms"] = round((time.perf_counter() - classification_start) * 1000, 2)
+
+            if not success:
+                telemetry.update({
+                    "classified": False,
+                    "relevant": False,
+                    "stored": False,
+                    "error": result.error,  # type: ignore
+                    "error_stage": "classification",
+                })
+                telemetry["total_duration_ms"] = round((time.perf_counter() - pipeline_start) * 1000, 2)
+                logger.bind(**telemetry).error("canonical-log-line")
+                return result  # type: ignore
+
+            classification_results: list[ClassificationResult] = result  # type: ignore
+            telemetry.update({
+                "classified": True,
+                "classifier_count": len(classification_results),
+            })
+
+            # Add individual classifier results to telemetry
+            for cls_result in classification_results:
+                prefix = cls_result.classifier_type.value.lower()
+                telemetry[f"{prefix}_relevant"] = cls_result.is_relevant
+                telemetry[f"{prefix}_confidence"] = cls_result.confidence
+                telemetry[f"{prefix}_model"] = cls_result.model_name
+
+            # Step 4: Filter relevant classifications
+            success, result = self._filter_and_check_relevance(
+                classification_results, min_confidence, url, section
+            )
+            if not success:
+                # Article not relevant OR filtering error
+                result_obj: OrchestrationResult = result  # type: ignore
+                telemetry.update({
+                    "relevant": result_obj.relevant,
+                    "stored": False,
+                    "relevant_classifiers": 0,
+                })
+                if result_obj.error:
+                    telemetry["error"] = result_obj.error
+                    telemetry["error_stage"] = "filtering"
+
+                telemetry["total_duration_ms"] = round((time.perf_counter() - pipeline_start) * 1000, 2)
+
+                # Use appropriate log level
+                if result_obj.error:
+                    logger.bind(**telemetry).error("canonical-log-line")
+                else:
+                    logger.bind(**telemetry).info("canonical-log-line")
+
+                return result  # type: ignore
+
+            relevant_results: list[ClassificationResult] = result  # type: ignore
+            telemetry.update({
+                "relevant": True,
+                "relevant_classifiers": len(relevant_results),
+            })
+
+            # Step 4.5: Normalize entities from relevant classifications
+            entity_normalization_start = time.perf_counter()
+            try:
+                normalized_entities: list[NormalizedEntity] = await self._normalize_entities(
+                    entity_normalizer=self.entity_normalizer,
+                    relevant_classifications=relevant_results,
+                )
+                telemetry["entity_count"] = len(normalized_entities)
+            except Exception as e:
+                # Non-fatal error - continue without entities
+                logger.bind(url=url, section=section, error_type=type(e).__name__).warning(
+                    f"Entity normalization failed - continuing: {e}"
+                )
+                normalized_entities = []
+                telemetry["entity_count"] = 0
+                telemetry["entity_normalization_error"] = str(e)
+
+            telemetry["entity_normalization_duration_ms"] = round((time.perf_counter() - entity_normalization_start) * 1000, 2)
+
+            # Step 5: Store article and classifications
+            storage_start = time.perf_counter()
+            storage_result = await self._store_article(
+                persistence_service=self.persistence_service,
+                conn=conn,
+                extracted=extracted,
+                url=url,
+                section=section,
+                relevant_results=relevant_results,
+                classification_results=classification_results,
+                normalized_entities=normalized_entities,
+                news_source_id=news_source_id,
+            )
+            telemetry["storage_duration_ms"] = round((time.perf_counter() - storage_start) * 1000, 2)
+
+            # Add storage results to telemetry
+            telemetry.update({
+                "stored": storage_result.stored,
+                "article_id": storage_result.article_id,
+                "classification_count": storage_result.classification_count,
+            })
+
+            if storage_result.error:
+                telemetry["error"] = storage_result.error
+                telemetry["error_stage"] = "storage"
+
+            # Calculate total duration
+            telemetry["total_duration_ms"] = round((time.perf_counter() - pipeline_start) * 1000, 2)
+
+            # Emit ONE canonical log line with all telemetry
+            if storage_result.error:
+                logger.bind(**telemetry).error("canonical-log-line")
+            elif not storage_result.stored:
+                # Duplicate article case
+                logger.bind(**telemetry).warning("canonical-log-line")
+            else:
+                logger.bind(**telemetry).info("canonical-log-line")
+
+            return storage_result
+
+        except Exception as e:
+            # Unexpected error - emit canonical log with whatever we collected
+            telemetry.update({
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "error_stage": "unexpected",
+                "total_duration_ms": round((time.perf_counter() - pipeline_start) * 1000, 2),
+            })
+            logger.bind(**telemetry).error("canonical-log-line", exc_info=True)
+            raise
 
     async def _extract_article(
         self,
@@ -204,11 +336,9 @@ class PipelineOrchestrationService:
         """
         try:
             extracted = await extraction_service.extract_article_content(url)
-            logger.info(f"Extracted: {extracted.title[:100]}...")
             return (True, extracted)
         except Exception as e:
             error_msg = f"Failed to extract article: {e}"
-            logger.exception(error_msg)
             return (
                 False,
                 OrchestrationResult(
@@ -253,7 +383,6 @@ class PipelineOrchestrationService:
             return (True, classification_input)
         except Exception as e:
             error_msg = f"Failed to convert to classification input: {e}"
-            logger.exception(error_msg)
             return (
                 False,
                 OrchestrationResult(
@@ -295,17 +424,9 @@ class PipelineOrchestrationService:
             classification_results = await classification_service.classify(
                 classification_input
             )
-            logger.info(f"Received {len(classification_results)} classification results")
-
-            for result in classification_results:
-                logger.info(
-                    f"  - {result.classifier_type.value}: "
-                    f"relevant={result.is_relevant}, confidence={result.confidence:.2f}"
-                )
             return (True, classification_results)
         except Exception as e:
             error_msg = f"Failed to classify article: {e}"
-            logger.exception(error_msg)
             return (
                 False,
                 OrchestrationResult(
@@ -351,7 +472,6 @@ class PipelineOrchestrationService:
             )
 
             if not relevant_results:
-                logger.info("Article is NOT relevant (skipping storage)")
                 return (
                     False,
                     OrchestrationResult(
@@ -368,13 +488,9 @@ class PipelineOrchestrationService:
                     ),
                 )
 
-            logger.info(
-                f"Article IS relevant ({len(relevant_results)} classifiers passed)"
-            )
             return (True, relevant_results)
         except Exception as e:
             error_msg = f"Failed to filter classifications: {e}"
-            logger.exception(error_msg)
             return (
                 False,
                 OrchestrationResult(
@@ -412,16 +528,13 @@ class PipelineOrchestrationService:
             unique_entities.update(classification.key_entities)
 
         if not unique_entities:
-            logger.info("No entities to normalize (all classifications had empty key_entities)")
             return []
 
         entity_list = list(unique_entities)
-        logger.info(f"Normalizing {len(entity_list)} unique entities")
 
         # Normalize entities using normalizer service
         normalized: list[NormalizedEntity] = await entity_normalizer.normalize(entity_list)
 
-        logger.info(f"Normalized {len(normalized)} entities")
         return normalized
 
     async def _store_article(
@@ -465,10 +578,6 @@ class PipelineOrchestrationService:
             )
 
             if storage_result.stored:
-                logger.info(f"Article stored with ID: {storage_result.article_id}")
-                logger.info(
-                    f"Stored {storage_result.classification_count} classifications"
-                )
                 return OrchestrationResult(
                     url=url,
                     section=section,
@@ -483,7 +592,6 @@ class PipelineOrchestrationService:
                 )
             else:
                 # Article already exists (duplicate URL)
-                logger.info("Article already exists in database (duplicate URL)")
                 return OrchestrationResult(
                     url=url,
                     section=section,
@@ -499,7 +607,6 @@ class PipelineOrchestrationService:
 
         except Exception as e:
             error_msg = f"Failed to store article: {e}"
-            logger.exception(error_msg)
             return OrchestrationResult(
                 url=url,
                 section=section,
