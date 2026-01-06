@@ -15,6 +15,7 @@ from src.article_classification.models import ClassificationInput, Classificatio
 from src.article_classification.services.classification_service import ClassificationService
 from src.article_classification.classifiers.corruption_classifier import CorruptionClassifier
 from src.article_classification.services.entity_normalizer_service import EntityNormalizerService
+from src.article_classification.services.in_memory_entity_cache import get_entity_cache
 from src.article_classification.converters import extracted_content_to_classification_input
 from src.article_classification.utils import filter_relevant_classifications
 from src.article_persistence.service import PostgresArticlePersistenceService
@@ -82,7 +83,10 @@ class PipelineOrchestrationService:
         self.persistence_service = (
             persistence_service or PostgresArticlePersistenceService()
         )
-        self.entity_normalizer = entity_normalizer or EntityNormalizerService()
+        # Inject singleton cache into entity normalizer (production config)
+        self.entity_normalizer = entity_normalizer or EntityNormalizerService(
+            cache=get_entity_cache()  # Singleton cache shared across all instances
+        )
 
     async def process_article(
         self,
