@@ -2,6 +2,7 @@
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
 from google.adk.tools import AgentTool
+from google.genai import types
 
 from src.article_classification.base import NORMALIZATION_MODEL
 

@@ -101,3 +101,66 @@ class EntityNormalizer(Protocol):
             ValueError: If entities list is empty or normalization fails
         """
         ...
+
+
+class EntityCache(Protocol):
+    """
+    Protocol for entity normalization caches using structural subtyping.
+
+    Cache Key: Normalized entity name (lowercase + whitespace collapsed)
+    Cache Value: Complete NormalizedEntity object
+    TTL: Configurable (default 14 days)
+    Eviction: LRU (default 100k max entries)
+    """
+
+    async def get(self, entity_name: str) -> NormalizedEntity | None:
+        """
+        Retrieve normalized entity from cache.
+
+        Args:
+            entity_name: Original entity name (will be normalized for lookup)
+
+        Returns:
+            Cached NormalizedEntity or None if not found/expired
+        """
+        ...
+
+    async def set(self, entity_name: str, normalized: NormalizedEntity) -> None:
+        """
+        Store normalized entity in cache with TTL.
+
+        Args:
+            entity_name: Original entity name (will be normalized for storage)
+            normalized: NormalizedEntity to cache
+        """
+        ...
+
+    async def get_many(self, entity_names: list[str]) -> dict[str, NormalizedEntity]:
+        """
+        Retrieve multiple entities (batch operation).
+
+        Args:
+            entity_names: List of original entity names
+
+        Returns:
+            Dict mapping original entity name → NormalizedEntity (hits only)
+        """
+        ...
+
+    async def set_many(self, normalizations: dict[str, NormalizedEntity]) -> None:
+        """
+        Store multiple entities (batch operation) with TTL.
+
+        Args:
+            normalizations: Dict mapping original entity name → NormalizedEntity
+        """
+        ...
+
+    def get_stats(self) -> dict:
+        """
+        Get cache statistics.
+
+        Returns:
+            Dict with keys: hits, misses, size, hit_rate, evictions, expirations
+        """
+        ...
