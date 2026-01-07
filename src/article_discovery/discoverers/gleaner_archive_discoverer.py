@@ -163,6 +163,81 @@ class GleanerArchiveDiscoverer:
             crawl_delay=crawl_delay,
         )
 
+    @classmethod
+    def for_date(
+        cls,
+        year: int,
+        month: int,
+        day: int,
+        base_url: str = "https://gleaner.newspaperarchive.com",
+        publication: str = "kingston-gleaner",
+        timeout: int = 30,
+        max_retries: int = 3,
+        base_backoff: float = 2.0,
+        crawl_delay: float = 2.0,
+    ) -> "GleanerArchiveDiscoverer":
+        """
+        Create discoverer for a specific date.
+
+        Factory method for discovering articles from a single date.
+        Useful for retrying individual dates that failed during bulk discovery.
+
+        Args:
+            year: Year (e.g., 2021)
+            month: Month (1-12)
+            day: Day (1-31)
+            base_url: Base URL for archive (default: https://gleaner.newspaperarchive.com)
+            publication: Publication name (default: kingston-gleaner)
+            timeout: HTTP request timeout in seconds (default: 30)
+            max_retries: Maximum retry attempts for failed requests (default: 3)
+            base_backoff: Base for exponential backoff calculation (default: 2.0)
+            crawl_delay: Delay between requests in seconds (default: 2.0)
+
+        Returns:
+            GleanerArchiveDiscoverer configured for the specific date
+
+        Raises:
+            ValueError: If date is invalid
+
+        Example:
+            # Discover all articles from November 15, 2021
+            discoverer = GleanerArchiveDiscoverer.for_date(
+                year=2021,
+                month=11,
+                day=15
+            )
+            articles = await discoverer.discover(news_source_id=1)
+        """
+        # Validate year
+        if year < 1900 or year > 3000:
+            raise ValueError(f"Invalid year: {year} (must be between 1900-3000)")
+
+        # Validate month
+        if month < 1 or month > 12:
+            raise ValueError(f"Invalid month: {month} (must be between 1-12)")
+
+        # Validate day (basic check)
+        if day < 1 or day > 31:
+            raise ValueError(f"Invalid day: {day} (must be between 1-31)")
+
+        # Create date (this will raise ValueError if invalid, e.g., Feb 30)
+        try:
+            target_date = datetime(year, month, day, tzinfo=timezone.utc)
+        except ValueError as e:
+            raise ValueError(f"Invalid date: {year}-{month:02d}-{day:02d} - {e}")
+
+        # Create instance for single date (days_back=0 means just this one date)
+        return cls(
+            base_url=base_url,
+            publication=publication,
+            end_date=target_date,
+            days_back=0,
+            timeout=timeout,
+            max_retries=max_retries,
+            base_backoff=base_backoff,
+            crawl_delay=crawl_delay,
+        )
+
     async def discover(self, news_source_id: int) -> list[DiscoveredArticle]:
         """
         Discover archive articles for the configured date range.

@@ -125,7 +125,7 @@ async def main():
     # Run parallel discovery
     try:
         start_time = time.time()
-        articles = await parallel_discovery(
+        articles: list[DiscoveredArticle] = await parallel_discovery(
             year=args.year,
             start_month=args.start_month,
             end_month=args.end_month,

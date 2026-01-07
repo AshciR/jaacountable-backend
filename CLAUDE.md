@@ -89,6 +89,7 @@ The archive discovery system uses date range-based discovery to find historical 
 **Key Features:**
 - **Date Range Discovery**: Process articles by date ranges (days, months)
 - **Month-Year Factory**: Convenient `for_month()` factory method for discovering entire months
+- **Single Date Factory**: Convenient `for_date()` factory method for discovering specific dates (useful for retries)
 - **Pagination Support**: Follows `<link rel="next">` tags to discover all pages per date
 - **Respectful Crawling**: Configurable crawl delay between requests (default: 2 seconds)
 - **Fail-Soft Error Handling**: Continues processing remaining dates if one fails
@@ -126,6 +127,17 @@ discoverer = GleanerArchiveDiscoverer.for_month(
 articles = await discoverer.discover(news_source_id=1)
 ```
 
+**Single date discovery:**
+```python
+# Discover specific date (November 15, 2021)
+discoverer = GleanerArchiveDiscoverer.for_date(
+    year=2021,
+    month=11,
+    day=15
+)
+articles = await discoverer.discover(news_source_id=1)
+```
+
 **Parallel multi-month discovery:**
 ```python
 # Discover 3 months in parallel using 3 workers
@@ -157,7 +169,9 @@ unique_articles = deduplicate_discovered_articles(all_articles)
 - Parallel (4 workers): ~45-48 minutes for 12 months (4× speedup vs ~3 hours sequential)
 
 **Important Design Notes:**
-- Factory method validates year (1900-3000) and month (1-12) ranges
+- Factory methods validate year (1900-3000), month (1-12), and day (1-31) ranges
+- `for_month()` factory creates discoverer for entire month (first to last day)
+- `for_date()` factory creates discoverer for single date (useful for retrying failed dates)
 - Date ranges are inclusive (first day to last day of month at midnight UTC)
 - Each worker respects `crawl_delay` independently (no rate limit violations)
 - Deduplication happens within each worker AND across workers
