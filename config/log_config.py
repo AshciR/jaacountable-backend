@@ -124,6 +124,7 @@ def configure_logging(
     logging.getLogger("httpcore").setLevel(logging.WARNING)  # httpx uses httpcore internally
     logging.getLogger("asyncpg").setLevel(logging.WARNING)
     logging.getLogger("feedparser").setLevel(logging.WARNING)
+    logging.getLogger("LiteLLM").setLevel(logging.WARNING)  # Suppress LiteLLM debug logs
 
     logger.info(f"Logging configured: level={log_level}, json={enable_json}, file={enable_file_logging}")
 
