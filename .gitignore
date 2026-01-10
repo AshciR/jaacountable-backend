@@ -18,3 +18,6 @@ wheels/
 # Logs
 logs/
 *.log
+
+# Classification outputs
+scripts/production/classification/output
