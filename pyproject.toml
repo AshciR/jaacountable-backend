@@ -12,6 +12,7 @@ dependencies = [
     "feedparser>=6.0.12",
     "google-adk[eval]==1.19.0",
     "greenlet>=3.2.3",
+    "httpx>=0.28.1",
     "litellm>=1.80.11",
     "loguru>=0.7.3",
     "lxml>=6.0.2",
@@ -22,7 +23,7 @@ dependencies = [
     "pytest-sugar>=1.1.1",
     "pytest-xdist>=3.8.0",
     "python-dotenv>=1.2.1",
-    "httpx>=0.28.1",
+    "rich>=14.2.0",
     "testcontainers[postgres]>=4.13.3",
 ]
 

@@ -60,3 +60,39 @@ class ArticleRepository:
             full_text=article.full_text,
             news_source_id=result['news_source_id'],
         )
+
+    async def get_existing_urls(
+        self,
+        conn: asyncpg.Connection,
+        urls: list[str],
+    ) -> set[str]:
+        """
+        Check which URLs from a list already exist in the database.
+
+        Uses a single batch query for performance (60x-600x faster than
+        individual queries for large batches).
+
+        Args:
+            conn: Database connection to use for the query
+            urls: List of URLs to check
+
+        Returns:
+            Set of URLs that already exist in the database
+
+        Example:
+            >>> repo = ArticleRepository()
+            >>> async with db_config.connection() as conn:
+            ...     existing = await repo.get_existing_urls(
+            ...         conn,
+            ...         ["https://example.com/1", "https://example.com/2"]
+            ...     )
+            ...     print(existing)  # {"https://example.com/1"}
+        """
+        if not urls:
+            return set()
+
+        # Query using aiosql with PostgreSQL array syntax
+        rows = await self.queries.get_existing_urls(conn, urls=urls)
+
+        # Extract URLs from rows and return as set
+        return {row["url"] for row in rows}

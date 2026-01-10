@@ -301,8 +301,8 @@ async def main() -> int:
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="scripts/production/output",
-        help="Output directory path (default: scripts/production/output)",
+        default="scripts/production/discovery/output",
+        help="Output directory path (default: scripts/production/discovery/output)",
     )
 
     args = parser.parse_args()
