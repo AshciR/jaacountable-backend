@@ -744,82 +744,84 @@ async def main() -> int:
         try:
             # Initialize repositories and services
             article_repo = ArticleRepository()
-            service = PipelineOrchestrationService()
 
-            # Optional: Pre-query existing URLs (--skip-existing)
-            if args.skip_existing:
-                logger.info("Filtering existing URLs...")
-                async with db_config.connection() as conn:
-                    articles, existing_urls = await filter_existing_urls(
-                        conn, articles, article_repo
-                    )
-                    stats.skipped_existing = len(existing_urls)
-                    stats.total = len(articles)
+            # Use orchestration service as context manager for HTTP connection pooling
+            async with PipelineOrchestrationService() as service:
+                # Optional: Pre-query existing URLs (--skip-existing)
+                if args.skip_existing:
+                    logger.info("Filtering existing URLs...")
+                    # Use context manager to close db connections. We reuse connection from the pool
+                    async with db_config.connection() as conn:
+                        articles, existing_urls = await filter_existing_urls(
+                            conn, articles, article_repo
+                        )
+                        stats.skipped_existing = len(existing_urls)
+                        stats.total = len(articles)
 
-            if len(articles) == 0:
-                logger.warning("No articles to process (all skipped or empty input)")
+                if len(articles) == 0:
+                    logger.warning("No articles to process (all skipped or empty input)")
+                    return 0
+
+                # Run concurrent processing with progress display
+                logger.info(
+                    f"Processing {len(articles)} articles with {args.concurrency} workers..."
+                )
+                results = await process_articles_concurrent(
+                    articles=articles,
+                    service=service,
+                    stats=stats,
+                    max_concurrency=args.concurrency,
+                    min_confidence=args.min_confidence,
+                    dry_run=args.dry_run,
+                )
+
+                # Generate final reports
+                logger.info("Generating reports...")
+                report = generate_final_report(
+                    stats=stats,
+                    output_dir=args.output_dir,
+                    timestamp=timestamp,
+                    input_file=str(args.input),
+                    concurrency=args.concurrency,
+                    min_confidence=args.min_confidence,
+                    skip_existing=args.skip_existing,
+                    dry_run=args.dry_run,
+                )
+
+                generate_error_report(
+                    results=results,
+                    output_dir=args.output_dir,
+                    timestamp=timestamp,
+                )
+
+                # Console output
+                console = Console()
+                console.print()
+                console.print("=" * 80, style="bold green")
+                console.print(
+                    "BATCH PROCESSING COMPLETED SUCCESSFULLY", style="bold green"
+                )
+                console.print("=" * 80, style="bold green")
+                console.print()
+                console.print(
+                    f"  Summary: {args.output_dir}/batch_results/batch_{timestamp}.json"
+                )
+                console.print(
+                    f"  Errors:  {args.output_dir}/batch_results/batch_{timestamp}_errors.jsonl"
+                )
+                console.print(f"  Logs:    {log_file}")
+                console.print()
+
+                logger.info("=" * 80)
+                logger.info("BATCH PROCESSING COMPLETED")
+                logger.info(f"Processed: {stats.processed}")
+                logger.info(f"Stored: {stats.stored}")
+                logger.info(
+                    f"Errors: {stats.extraction_errors + stats.classification_errors + stats.storage_errors + stats.other_errors}"
+                )
+                logger.info("=" * 80)
+
                 return 0
-
-            # Run concurrent processing with progress display
-            logger.info(
-                f"Processing {len(articles)} articles with {args.concurrency} workers..."
-            )
-            results = await process_articles_concurrent(
-                articles=articles,
-                service=service,
-                stats=stats,
-                max_concurrency=args.concurrency,
-                min_confidence=args.min_confidence,
-                dry_run=args.dry_run,
-            )
-
-            # Generate final reports
-            logger.info("Generating reports...")
-            report = generate_final_report(
-                stats=stats,
-                output_dir=args.output_dir,
-                timestamp=timestamp,
-                input_file=str(args.input),
-                concurrency=args.concurrency,
-                min_confidence=args.min_confidence,
-                skip_existing=args.skip_existing,
-                dry_run=args.dry_run,
-            )
-
-            generate_error_report(
-                results=results,
-                output_dir=args.output_dir,
-                timestamp=timestamp,
-            )
-
-            # Console output
-            console = Console()
-            console.print()
-            console.print("=" * 80, style="bold green")
-            console.print(
-                "BATCH PROCESSING COMPLETED SUCCESSFULLY", style="bold green"
-            )
-            console.print("=" * 80, style="bold green")
-            console.print()
-            console.print(
-                f"  Summary: {args.output_dir}/batch_results/batch_{timestamp}.json"
-            )
-            console.print(
-                f"  Errors:  {args.output_dir}/batch_results/batch_{timestamp}_errors.jsonl"
-            )
-            console.print(f"  Logs:    {log_file}")
-            console.print()
-
-            logger.info("=" * 80)
-            logger.info("BATCH PROCESSING COMPLETED")
-            logger.info(f"Processed: {stats.processed}")
-            logger.info(f"Stored: {stats.stored}")
-            logger.info(
-                f"Errors: {stats.extraction_errors + stats.classification_errors + stats.storage_errors + stats.other_errors}"
-            )
-            logger.info("=" * 80)
-
-            return 0
 
         finally:
             # Close database pool

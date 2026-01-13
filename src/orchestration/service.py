@@ -88,6 +88,35 @@ class PipelineOrchestrationService:
             cache=get_entity_cache()  # Singleton cache shared across all instances
         )
 
+    async def __aenter__(self):
+        """
+        Initialize extraction service with HTTP connection pooling.
+
+        If the extraction service supports async context manager (has __aenter__),
+        this method initializes it for connection pooling during batch processing.
+
+        Returns:
+            Self to enable async context manager pattern
+        """
+        if hasattr(self.extraction_service, "__aenter__"):
+            await self.extraction_service.__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """
+        Clean up extraction service resources.
+
+        If the extraction service supports async context manager (has __aexit__),
+        this method closes HTTP connections and cleans up resources.
+
+        Args:
+            exc_type: Exception type if an error occurred
+            exc_val: Exception value if an error occurred
+            exc_tb: Exception traceback if an error occurred
+        """
+        if hasattr(self.extraction_service, "__aexit__"):
+            await self.extraction_service.__aexit__(exc_type, exc_val, exc_tb)
+
     async def process_article(
         self,
         conn: asyncpg.Connection,

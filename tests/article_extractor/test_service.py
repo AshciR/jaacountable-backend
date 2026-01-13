@@ -478,3 +478,109 @@ class TestFetchHtmlRetryLogic:
         assert exc_info.value.response.status_code == 404
         assert mock_client.get.call_count == 2  # 503 + 404
         assert mock_sleep.call_count == 1  # Only sleep after 503
+
+
+class TestConnectionPoolingWithContextManager:
+    """Tests for connection pooling via async context manager."""
+
+    @patch("src.article_extractor.service.httpx.AsyncClient")
+    async def test_context_manager_creates_pooled_client(
+        self, mock_async_client_class
+    ):
+        """Verify __aenter__ creates HTTP client."""
+        # Given: mock client with aclose method
+        mock_client = Mock()
+        mock_client.aclose = AsyncMock()
+        mock_async_client_class.return_value = mock_client
+
+        # When: using service as context manager
+        service = DefaultArticleExtractionService()
+        async with service as s:
+            # Then: service returns self and stores client
+            assert s is service
+            assert hasattr(service, "_http_client")
+            assert service._http_client is mock_client
+
+        # Then: client is closed on exit
+        mock_client.aclose.assert_called_once()
+
+    @patch("src.article_extractor.service.httpx.AsyncClient")
+    async def test_context_manager_reuses_client_across_extractions(
+        self, mock_async_client_class, gleaner_html_v2
+    ):
+        """Verify same client is reused for multiple extractions."""
+        # Given: mock client and response
+        mock_client = Mock()
+        mock_client.aclose = AsyncMock()
+        mock_async_client_class.return_value = mock_client
+
+        mock_response = Mock()
+        mock_response.text = gleaner_html_v2
+        mock_response.raise_for_status = Mock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+
+        # When: extracting multiple articles with context manager
+        service = DefaultArticleExtractionService()
+        async with service:
+            await service.extract_article_content(
+                "https://jamaica-gleaner.com/article/news/1"
+            )
+            await service.extract_article_content(
+                "https://jamaica-gleaner.com/article/news/2"
+            )
+            await service.extract_article_content(
+                "https://jamaica-gleaner.com/article/news/3"
+            )
+
+        # Then: client created only ONCE (pooling!)
+        assert mock_async_client_class.call_count == 1
+        # Then: client used for all 3 extractions
+        assert mock_client.get.call_count == 3
+        # Then: client closed once at end
+        mock_client.aclose.assert_called_once()
+
+    @patch("src.article_extractor.service.httpx.AsyncClient")
+    async def test_context_manager_cleanup_on_error(self, mock_async_client_class):
+        """Verify client is closed even if extraction fails."""
+        # Given: mock client that raises error on get
+        mock_client = Mock()
+        mock_client.aclose = AsyncMock()
+        mock_async_client_class.return_value = mock_client
+        mock_client.get = AsyncMock(side_effect=Exception("Network error"))
+
+        # When: extraction fails inside context manager
+        service = DefaultArticleExtractionService()
+        with pytest.raises(Exception):
+            async with service:
+                await service.extract_article_content(
+                    "https://jamaica-gleaner.com/test"
+                )
+
+        # Then: client still closed despite error
+        mock_client.aclose.assert_called_once()
+
+    @patch("src.article_extractor.service.httpx.AsyncClient")
+    async def test_backward_compatibility_without_context_manager(
+        self, mock_async_client_class, gleaner_html_v2
+    ):
+        """Verify service still works WITHOUT context manager (backward compatibility)."""
+        # Given: mock temporary client (created in extract_article_content fallback)
+        mock_temp_client = Mock()
+        mock_async_client_class.return_value.__aenter__.return_value = (
+            mock_temp_client
+        )
+
+        mock_response = Mock()
+        mock_response.text = gleaner_html_v2
+        mock_response.raise_for_status = Mock()
+        mock_temp_client.get = AsyncMock(return_value=mock_response)
+
+        # When: using service WITHOUT context manager (legacy usage)
+        service = DefaultArticleExtractionService()
+        content = await service.extract_article_content(
+            "https://jamaica-gleaner.com/article/news/test"
+        )
+
+        # Then: extraction succeeds with temporary client
+        assert "One Health" in content.title
+        assert mock_temp_client.get.call_count == 1
