@@ -335,9 +335,10 @@ jaacountable-backend/
 ├── config/                           # Configuration modules
 │   └── database.py                   # Database connection pool
 ├── scripts/                          # Helper scripts
-│   ├── start-db.sh                   # Start PostgreSQL container
-│   ├── migrate.sh                    # Run migrations
-│   └── create-migration.sh          # Create new migration
+│   └── infrastructure/               # Database and infrastructure scripts
+│       ├── start-db.sh               # Start PostgreSQL container
+│       ├── migrate.sh                # Run migrations
+│       └── create-migration.sh       # Create new migration
 ├── alembic.ini                       # Alembic configuration
 ├── docker-compose.yml                # Docker services definition
 ├── .env.example                      # Environment variables template

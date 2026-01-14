@@ -14,6 +14,7 @@ from src.article_discovery.models import DiscoveredArticle
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.external
 @pytest.mark.integration
 class TestGleanerArchiveDiscovererIntegration:
     """Integration tests with real HTTP requests (marked for CI/CD)."""

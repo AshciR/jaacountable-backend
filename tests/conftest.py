@@ -32,7 +32,7 @@ def postgres_container() -> Generator[PostgresContainer, None, None]:
     """
     # Use same credentials as .env.example for consistency
     postgres = PostgresContainer(
-        image="postgres:18-alpine",
+        image="postgres:17-alpine",
         username="user",
         password="password",
         dbname="jaacountable_db",

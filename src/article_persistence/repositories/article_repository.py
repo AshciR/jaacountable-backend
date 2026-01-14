@@ -1,7 +1,8 @@
 """Repository for article database operations."""
 import aiosql
-from datetime import datetime
 from pathlib import Path
+from uuid import UUID
+
 import asyncpg
 
 from src.article_persistence.models.domain import Article
@@ -52,6 +53,7 @@ class ArticleRepository:
         # so we use the original article's full_text value
         return Article(
             id=result['id'],
+            public_id=result['public_id'],
             url=result['url'],
             title=result['title'],
             section=result['section'],
@@ -96,3 +98,36 @@ class ArticleRepository:
 
         # Extract URLs from rows and return as set
         return {row["url"] for row in rows}
+
+    async def get_by_public_id(
+        self,
+        conn: asyncpg.Connection,
+        public_id: UUID,
+    ) -> Article | None:
+        """
+        Retrieve an article by its public UUID.
+
+        Args:
+            conn: Database connection to use for the query
+            public_id: The public UUID of the article
+
+        Returns:
+            Article if found, None otherwise
+        """
+        result = await self.queries.get_article_by_public_id(
+            conn, public_id=public_id
+        )
+        if result is None:
+            return None
+
+        return Article(
+            id=result['id'],
+            public_id=result['public_id'],
+            url=result['url'],
+            title=result['title'],
+            section=result['section'],
+            published_date=result['published_date'],
+            fetched_at=result['fetched_at'],
+            full_text=result['full_text'],
+            news_source_id=result['news_source_id'],
+        )

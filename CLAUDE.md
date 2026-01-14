@@ -237,21 +237,21 @@ This suggests the project is designed to work with Google ADK's web interface.
 
 ### Database Management
 
-**Helper Scripts** (all located in `scripts/`):
-- `./scripts/start-db.sh` - Start PostgreSQL Docker container and wait for health check
-- `./scripts/migrate.sh` - Run Alembic migrations to latest version
-- `./scripts/create-migration.sh "message"` - Create new migration file with manual SQL DDL
+**Helper Scripts** (all located in `scripts/infrastructure/`):
+- `./scripts/infrastructure/start-db.sh` - Start PostgreSQL Docker container and wait for health check
+- `./scripts/infrastructure/migrate.sh` - Run Alembic migrations to latest version
+- `./scripts/infrastructure/create-migration.sh "message"` - Create new migration file with manual SQL DDL
 
 **Common Operations:**
 ```bash
 # Start database
-./scripts/start-article_persistence.sh
+./scripts/infrastructure/start-db.sh
 
 # Run migrations
-./scripts/migrate.sh
+./scripts/infrastructure/migrate.sh
 
 # Create new migration
-./scripts/create-migration.sh "add classifications table"
+./scripts/infrastructure/create-migration.sh "add classifications table"
 
 # Connect to database
 docker exec -it postgres psql -U user -d jaacountable_db

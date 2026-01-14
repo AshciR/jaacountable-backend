@@ -3,6 +3,7 @@
 import asyncpg
 import pytest
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 from src.article_persistence.repositories.article_repository import ArticleRepository
 from src.article_persistence.models.domain import Article
@@ -30,8 +31,9 @@ class TestInsertArticleHappyPath:
         # When: the article is inserted
         result = await repository.insert_article(db_connection, article)
 
-        # Then: the returned article has a database-generated id and matching fields
+        # Then: the returned article has database-generated id and public_id, plus matching fields
         assert result.id is not None
+        assert result.public_id is not None
         assert result.url == article.url
         assert result.title == article.title
         assert result.section == article.section
@@ -55,8 +57,9 @@ class TestInsertArticleHappyPath:
         # When: the article is inserted
         result = await repository.insert_article(db_connection, article)
 
-        # Then: returns article with id, defaults applied, optional fields are None
+        # Then: returns article with id, public_id, defaults applied, optional fields are None
         assert result.id is not None
+        assert result.public_id is not None
         assert result.url == article.url
         assert result.title == article.title
         assert result.section == article.section
@@ -179,8 +182,8 @@ class TestInsertArticleDatabaseConstraints:
         await repository.insert_article(db_connection, article)
 
         # When: attempting to delete the news source
-        # Then: raises RestrictViolationError due to ON DELETE RESTRICT
-        with pytest.raises(asyncpg.RestrictViolationError):
+        # Then: raises ForeignKeyViolationError due to ON DELETE RESTRICT
+        with pytest.raises(asyncpg.ForeignKeyViolationError):
             await db_connection.execute(
                 "DELETE FROM news_sources WHERE id = $1",
                 news_source.id,
@@ -351,3 +354,75 @@ class TestInsertArticleEdgeCases:
         # Then: returns article with the custom fetched_at preserved
         assert result.id is not None
         assert result.fetched_at == custom_fetched_at
+
+
+class TestGetByPublicId:
+    """Tests for get_by_public_id method."""
+
+    async def test_get_by_public_id_success(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article exists in the database
+        article = Article(
+            url="https://example.com/public-id-lookup",
+            title="Public ID Lookup Test",
+            section="news",
+            full_text="Content for public ID test",
+            news_source_id=1,
+        )
+        repository = ArticleRepository()
+        inserted = await repository.insert_article(db_connection, article)
+
+        # When: the article is retrieved by its public_id
+        result = await repository.get_by_public_id(db_connection, inserted.public_id)
+
+        # Then: returns the same article with all fields populated
+        assert result is not None
+        assert result.id == inserted.id
+        assert result.public_id == inserted.public_id
+        assert result.url == article.url
+        assert result.title == article.title
+        assert result.section == article.section
+        assert result.full_text == article.full_text
+
+    async def test_get_by_public_id_not_found(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: a random UUID that doesn't exist in the database
+        non_existent_uuid = uuid4()
+        repository = ArticleRepository()
+
+        # When: attempting to retrieve by that UUID
+        result = await repository.get_by_public_id(db_connection, non_existent_uuid)
+
+        # Then: returns None
+        assert result is None
+
+    async def test_public_id_is_unique_across_articles(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: multiple articles are inserted
+        repository = ArticleRepository()
+        articles = [
+            Article(
+                url=f"https://example.com/unique-public-id-{i}",
+                title=f"Unique Public ID Test {i}",
+                section="news",
+                news_source_id=1,
+            )
+            for i in range(3)
+        ]
+
+        # When: each article is inserted
+        results = []
+        for article in articles:
+            result = await repository.insert_article(db_connection, article)
+            results.append(result)
+
+        # Then: each article has a unique public_id
+        public_ids = [r.public_id for r in results]
+        assert len(set(public_ids)) == 3  # All public_ids are unique
+        assert all(pid is not None for pid in public_ids)

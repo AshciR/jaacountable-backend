@@ -18,7 +18,13 @@ VALUES (
     :full_text,
     :news_source_id
 )
-RETURNING id, url, title, section, published_date, fetched_at, news_source_id;
+RETURNING id, public_id, url, title, section, published_date, fetched_at, news_source_id;
+
+-- name: get_article_by_public_id^
+-- Retrieve an article by its public UUID (for API lookups)
+SELECT id, public_id, url, title, section, published_date, fetched_at, full_text, news_source_id
+FROM articles
+WHERE public_id = :public_id;
 
 -- name: get_existing_urls
 -- Check which URLs from a list already exist in the database
