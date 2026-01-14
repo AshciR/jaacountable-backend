@@ -64,14 +64,14 @@ The system specifically looks for articles mentioning:
 
 5. **Start the PostgreSQL database**:
    ```bash
-   ./scripts/start-article_persistence.sh
+   ./scripts/infrastructure/start-db.sh
    ```
 
    This will start a PostgreSQL 18 container using Docker Compose.
 
 6. **Run database migrations**:
    ```bash
-   ./scripts/migrate.sh
+   ./scripts/infrastructure/migrate.sh
    ```
 
    This will create all necessary database tables.
@@ -96,25 +96,27 @@ The project uses PostgreSQL for data persistence and Alembic for database migrat
 
 All scripts are located in the `scripts/` directory:
 
-- **`./scripts/start-db.sh`** - Start the PostgreSQL Docker container and wait for it to be healthy
-- **`./scripts/migrate.sh`** - Run database migrations to the latest version
-- **`./scripts/create-migration.sh "message"`** - Create a new migration file with manual SQL DDL
+- **`./scripts/infrastructure/start-db.sh`** - Start the PostgreSQL Docker container and wait for it to be healthy
+- **`./scripts/infrastructure/migrate.sh [env-file]`** - Run database migrations (optionally specify environment file)
+- **`./scripts/infrastructure/create-migration.sh "message"`** - Create a new migration file with manual SQL DDL
 
 ### Common Database Commands
 
 **Start the database:**
 ```bash
-./scripts/start-article_persistence.sh
+./scripts/infrastructure/start-db.sh
 ```
 
 **Run migrations:**
 ```bash
-./scripts/migrate.sh
+./scripts/infrastructure/migrate.sh
+# Or for staging:
+# ./scripts/infrastructure/migrate.sh .staging.env
 ```
 
 **Create a new migration:**
 ```bash
-./scripts/create-migration.sh "add classifications table"
+./scripts/infrastructure/create-migration.sh "add classifications table"
 # Then edit the migration file in alembic/versions/
 ```
 
@@ -137,6 +139,170 @@ docker-compose down
 ```bash
 docker-compose down -v
 ```
+
+## Supabase Setup (Staging/Production)
+
+For deploying to staging or production environments, you can use Supabase's hosted PostgreSQL service instead of running your own database server.
+
+### Prerequisites
+
+- Supabase account (sign up at https://supabase.com)
+- Supabase project created for your environment (e.g., "jaacountable-staging")
+
+### Getting Connection Credentials
+
+1. Log in to your Supabase dashboard
+2. Select your project
+3. Navigate to **Project Settings** → **Database**
+4. Scroll to **Connection String** section
+5. Copy the **Connection pooling** string (recommended for application connections)
+
+The connection string format will look like:
+```
+postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres
+```
+
+### Setting Up Your Environment
+
+1. **Create a `.staging.env` file** for your Supabase staging environment:
+   ```bash
+   cp .env.example .staging.env
+   ```
+
+2. **Update `.staging.env`** with your Supabase connection string:
+   ```bash
+   # Database Configuration - Supabase Staging
+   DATABASE_URL=postgresql+asyncpg://postgres.bdamnvmeszxszdnrqoqw:[YOUR-PASSWORD]@aws-0-us-west-2.pooler.supabase.com:5432/postgres
+
+   # OpenAI API Key (for LiteLLM classification models)
+   OPENAI_API_KEY=sk-your-actual-key-here
+
+   # Logging Configuration
+   LOG_LEVEL=INFO
+   LOG_JSON=false
+   LOG_FILE=false
+   ```
+
+   **Important:** Change `postgresql://` to `postgresql+asyncpg://` to use the asyncpg driver.
+
+3. **Test the connection** (optional but recommended):
+   ```bash
+   # Load staging environment and test
+   set -a; source .staging.env; set +a
+   uv run python scripts/infrastructure/test-db-connection.py
+   ```
+
+   This will verify that:
+   - Connection credentials are correct
+   - Database is accessible
+   - Connection pooling works
+
+4. **Run database migrations**:
+   ```bash
+   ./scripts/infrastructure/migrate.sh .staging.env
+   ```
+
+   This will create all necessary tables in your Supabase database.
+
+5. **Verify in Supabase Dashboard**:
+   - Go to **Table Editor** in your Supabase dashboard
+   - You should see the following tables:
+     - `articles`
+     - `classifications`
+     - `news_sources`
+     - `entities`
+     - `article_entities`
+     - `alembic_version`
+
+### Connection Types
+
+Supabase offers two connection types:
+
+- **Connection Pooling** (recommended for applications):
+  - Format: `postgresql+asyncpg://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres`
+  - Uses port **5432** (pooler)
+  - Better for high-traffic applications
+  - Default connection limit: 15 connections per user
+
+- **Direct Connection** (for admin tasks):
+  - Format: `postgresql+asyncpg://postgres.[project-ref]:[password]@db.[project-ref].supabase.co:5432/postgres`
+  - Uses port **5432** or **6543** depending on configuration
+  - Direct access to PostgreSQL server
+  - Both types work for migrations
+
+### Managing Multiple Environments
+
+Create separate environment files for each environment:
+
+```bash
+.env              # Local development (Docker PostgreSQL)
+.staging.env      # Supabase staging
+.production.env   # Supabase production (future)
+```
+
+Run migrations for the appropriate environment:
+
+```bash
+# For local development
+./scripts/infrastructure/migrate.sh              # Uses .env (default)
+
+# For staging
+./scripts/infrastructure/migrate.sh .staging.env
+
+# For production (future)
+./scripts/infrastructure/migrate.sh .production.env
+```
+
+For other commands, load the environment file before running:
+
+```bash
+# Load environment variables
+set -a; source .staging.env; set +a
+
+# Run your command
+uv run python scripts/infrastructure/test-db-connection.py
+```
+
+**Important:** The `.gitignore` file already excludes all `*.env` files to prevent committing credentials.
+
+### Connection Pooling Best Practices
+
+When connecting to Supabase, you're connecting through **Supavisor**, Supabase's connection pooler. This pooler sits between your application and PostgreSQL, managing connections efficiently.
+
+**Important:** Because Supabase already provides connection pooling, you should use **smaller pool sizes** in your application to avoid exhausting backend connection limits.
+
+**Recommended pool sizes for Supabase:**
+- `min_size`: **2-5** connections (instead of default 10)
+- `max_size`: **10-15** connections (instead of default 20)
+
+**Why smaller pool sizes?**
+- Supabase's Supavisor pooler already maintains hot connections
+- Multiple application instances × large pool sizes = exhausted connection limits
+- Supabase has connection limits based on your compute tier
+
+To adjust pool sizes, modify the `create_pool()` call in your application code:
+
+```python
+from config.database import DatabaseConfig
+
+db_config = DatabaseConfig()
+await db_config.create_pool(min_size=2, max_size=10)  # Supabase-friendly sizes
+```
+
+**Connection Modes:**
+- **Session Mode (Port 5432)**: For persistent backend services (recommended for this project)
+- **Transaction Mode (Port 6543)**: For serverless/edge functions with transient connections
+
+The pooler connection string provided uses **Session Mode** (port 5432), which is appropriate for long-running backend services.
+
+### Important Notes
+
+- **Database Name**: Supabase uses `postgres` as the default database name (not `jaacountable_db`)
+- **User Format**: Supabase username is `postgres.[project-ref]` (e.g., `postgres.bdamnvmeszxszdnrqoqw`)
+- **Password**: Never commit your Supabase password to version control
+- **Connection Pooling**: Use smaller pool sizes (2-5 min, 10-15 max) when connecting through Supabase pooler
+- **PostgreSQL Version**: Supabase runs PostgreSQL 15+, all migrations are compatible
+- **Connection Limits**: Monitor your Supabase project's connection usage in the dashboard
 
 ### Database Schema
 
@@ -314,7 +480,7 @@ GitHub Actions CI runs **all tests** (including integration tests) using the `CL
 
 1. **Create a new migration:**
    ```bash
-   ./scripts/create-migration.sh "description of changes"
+   ./scripts/infrastructure/create-migration.sh "description of changes"
    ```
 
 2. **Edit the migration file** in `alembic/versions/`:
@@ -335,7 +501,7 @@ GitHub Actions CI runs **all tests** (including integration tests) using the `CL
 
 3. **Test the migration:**
    ```bash
-   ./scripts/migrate.sh
+   ./scripts/infrastructure/migrate.sh
    ```
 
 4. **Verify in database:**
@@ -423,7 +589,7 @@ async def classify_education_spending(input_data: ClassificationInput) -> Classi
 If you need to store classifier-specific metadata, create a new migration:
 
 ```bash
-./scripts/create-migration.sh "add education_spending classifier support"
+./scripts/infrastructure/create-migration.sh "add education_spending classifier support"
 ```
 
 **Step 5: Run Tests**
