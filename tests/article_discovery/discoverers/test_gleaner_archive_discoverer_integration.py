@@ -15,9 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.external
-@pytest.mark.integration
 class TestGleanerArchiveDiscovererIntegration:
-    """Integration tests with real HTTP requests (marked for CI/CD)."""
+    """Integration tests with real HTTP requests (excluded from CI, run manually or with -m external)."""
 
     @pytest.mark.asyncio
     async def test_discover_real_archive_pages_for_two_days(self):
