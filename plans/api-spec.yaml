@@ -1,0 +1,432 @@
+openapi: 3.0.3
+info:
+  title: JA Accountable API
+  description: API for searching news articles and browsing extracted entities with classification data.
+  version: 1.0.0
+
+servers:
+  - url: /api/v1
+    description: API v1
+
+paths:
+  /articles/search:
+    get:
+      summary: Search articles
+      description: |
+        Search for articles using full-text search (PostgreSQL FTS on title + full_text),
+        with optional filtering by entity, date range, and sorting options.
+      operationId: searchArticles
+      tags:
+        - Articles
+      parameters:
+        - name: q
+          in: query
+          description: Full-text search query (uses PostgreSQL FTS on title + full_text)
+          required: false
+          schema:
+            type: string
+          example: corruption
+
+        - name: entity
+          in: query
+          description: Filter by entity name (partial match)
+          required: false
+          schema:
+            type: string
+          example: Ministry of Finance
+
+        - name: from_date
+          in: query
+          description: Articles published on or after this date
+          required: false
+          schema:
+            type: string
+            format: date
+          example: '2024-01-01'
+
+        - name: to_date
+          in: query
+          description: Articles published on or before this date
+          required: false
+          schema:
+            type: string
+            format: date
+          example: '2024-12-31'
+
+        - name: include_full_text
+          in: query
+          description: Include full article text in response
+          required: false
+          schema:
+            type: boolean
+            default: false
+
+        - name: page
+          in: query
+          description: Page number (1-indexed)
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+
+        - name: page_size
+          in: query
+          description: Results per page (max 100)
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+
+        - name: sort
+          in: query
+          description: Sort field
+          required: false
+          schema:
+            type: string
+            enum:
+              - relevance
+              - published_date
+            default: relevance
+
+        - name: order
+          in: query
+          description: Sort order
+          required: false
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+            default: desc
+
+      responses:
+        '200':
+          description: Successful search response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+
+        '400':
+          description: Invalid query parameters (bad date format, page < 1, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+        '500':
+          description: Database/server errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /entities:
+    get:
+      summary: List entities
+      description: |
+        List entities (people, organizations, government bodies) extracted from
+        articles, with article counts and recency data.
+
+        Supports sorting by most recent appearance or by frequency, with optional
+        time-window scoping via the `since` parameter. When `since` is provided,
+        both article_count and last_seen_date reflect only articles within that window.
+      operationId: listEntities
+      tags:
+        - Entities
+      parameters:
+        - name: sort
+          in: query
+          description: |
+            Sort mode:
+            - `latest`: ordered by most recent article appearance
+            - `most_found`: ordered by article count (most appearances first)
+          required: false
+          schema:
+            type: string
+            enum:
+              - latest
+              - most_found
+            default: latest
+
+        - name: since
+          in: query
+          description: |
+            Scope results to articles published on or after this date.
+            When provided, both article_count and last_seen_date reflect
+            only articles within this time window.
+          required: false
+          schema:
+            type: string
+            format: date
+          example: '2024-01-01'
+
+        - name: page
+          in: query
+          description: Page number (1-indexed)
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+
+        - name: page_size
+          in: query
+          description: Results per page (max 100)
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityListResponse'
+
+        '400':
+          description: Invalid query parameters (bad date format, page < 1, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+        '500':
+          description: Database/server errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    # ── Article Search ──────────────────────────────────────────────
+
+    SearchResponse:
+      type: object
+      required:
+        - data
+        - pagination
+        - query
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Article'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        query:
+          $ref: '#/components/schemas/SearchQueryEcho'
+
+    Article:
+      type: object
+      required:
+        - id
+        - url
+        - title
+        - section
+        - news_source
+        - published_date
+        - snippet
+        - entities
+        - classifications
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique article identifier
+          example: 550e8400-e29b-41d4-a716-446655440000
+        url:
+          type: string
+          format: uri
+          description: Original article URL
+          example: https://jamaica-gleaner.com/article/...
+        title:
+          type: string
+          description: Article title
+          example: Government Minister Under Investigation
+        section:
+          type: string
+          description: Article section/category
+          example: news
+        news_source:
+          type: string
+          description: Source identifier for the news outlet
+          example: JAMAICA_GLEANER
+        published_date:
+          type: string
+          format: date-time
+          description: Article publication date
+          example: '2024-01-15T10:30:00Z'
+        snippet:
+          type: string
+          description: Highlighted excerpt with search terms marked
+          example: '...highlighted excerpt with <mark>search terms</mark>...'
+        entities:
+          type: array
+          items:
+            type: string
+          description: List of extracted entity names
+          example:
+            - John Smith
+            - Ministry of Finance
+        classifications:
+          type: array
+          items:
+            $ref: '#/components/schemas/Classification'
+          description: List of article classifications with confidence scores
+        full_text:
+          type: string
+          description: Full article text (only included if include_full_text=true)
+
+    Classification:
+      type: object
+      required:
+        - classifier_type
+        - confidence
+      properties:
+        classifier_type:
+          type: string
+          description: Type of classification
+          example: CORRUPTION
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Confidence score for the classification
+          example: 0.92
+
+    SearchQueryEcho:
+      type: object
+      properties:
+        q:
+          type: string
+          nullable: true
+          description: The search query that was used
+          example: corruption
+        from_date:
+          type: string
+          format: date
+          nullable: true
+          description: The from_date filter that was applied
+          example: '2024-01-01'
+        to_date:
+          type: string
+          format: date
+          nullable: true
+          description: The to_date filter that was applied
+        entity:
+          type: string
+          nullable: true
+          description: The entity filter that was applied
+
+    # ── Entities ────────────────────────────────────────────────────
+
+    EntityListResponse:
+      type: object
+      required:
+        - data
+        - pagination
+        - query
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntitySummary'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        query:
+          $ref: '#/components/schemas/EntityQueryEcho'
+
+    EntitySummary:
+      type: object
+      required:
+        - name
+        - normalized_name
+        - article_count
+        - last_seen_date
+      properties:
+        name:
+          type: string
+          description: Display name of the entity as originally extracted
+          example: Ministry of Finance
+        normalized_name:
+          type: string
+          description: Normalized canonical name used for deduplication
+          example: ministry_of_finance
+        article_count:
+          type: integer
+          description: Number of articles this entity appears in (scoped by time window if since is provided)
+          example: 32
+        last_seen_date:
+          type: string
+          format: date-time
+          description: Most recent article publication date featuring this entity (scoped by time window if since is provided)
+          example: '2024-02-14T09:15:00Z'
+
+    EntityQueryEcho:
+      type: object
+      properties:
+        sort:
+          type: string
+          enum:
+            - latest
+            - most_found
+          description: The sort mode that was applied
+          example: latest
+        since:
+          type: string
+          format: date
+          nullable: true
+          description: The time-window filter that was applied
+          example: '2024-01-01'
+
+    # ── Shared ──────────────────────────────────────────────────────
+
+    Pagination:
+      type: object
+      required:
+        - page
+        - page_size
+        - total_results
+        - total_pages
+      properties:
+        page:
+          type: integer
+          description: Current page number
+          example: 1
+        page_size:
+          type: integer
+          description: Number of results per page
+          example: 20
+        total_results:
+          type: integer
+          description: Total number of matching results
+          example: 150
+        total_pages:
+          type: integer
+          description: Total number of pages
+          example: 8
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+          example: BAD_REQUEST
+        message:
+          type: string
+          description: Human-readable error message
+          example: Invalid date format for from_date parameter

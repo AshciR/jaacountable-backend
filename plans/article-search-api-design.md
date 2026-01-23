@@ -39,8 +39,15 @@ Design an OpenAPI specification for searching articles in the jaacountable-backe
       "title": "Government Minister Under Investigation",
       "section": "news",
       "published_date": "2024-01-15T10:30:00Z",
+      "news_source": "JAMAICA_GLEANER",
       "snippet": "...highlighted excerpt with <mark>search terms</mark>...",
       "entities": ["John Smith", "Ministry of Finance"],
+      "classifications": [
+        {
+          "classifier_type": "CORRUPTION",
+          "confidence": 0.92
+        }
+      ],
       "full_text": "..." // Only if include_full_text=true
     }
   ],
@@ -99,17 +106,27 @@ CREATE TRIGGER articles_search_vector_trigger
 
 ### Existing Indexes (Already in place)
 - `idx_articles_published_date` - Supports date range queries
+- `idx_classifications_article_id` - Supports classification JOIN queries
 - Entity queries will JOIN through `article_entities` and `entities` tables
 
 ---
 
-## Files to Create
+## Files to Create/Modify
 
 1. **`openapi/article-search.yaml`** - OpenAPI 3.0 specification with:
    - Search endpoint definition
    - Request/response schemas
    - Error schemas
    - Example requests/responses
+
+2. **`src/article_persistence/models/domain.py`** - Add `NewsSourceType` enum:
+   ```python
+   class NewsSourceType(str, Enum):
+       """Type-safe identifier for news sources in API responses."""
+       JAMAICA_GLEANER = "JAMAICA_GLEANER"
+       # Future: JAMAICA_OBSERVER = "JAMAICA_OBSERVER"
+   ```
+   Pattern follows existing `ClassifierType` enum in `src/services/article_classification/models.py`.
 
 ---
 
@@ -118,14 +135,31 @@ CREATE TRIGGER articles_search_vector_trigger
 ### PostgreSQL Full-Text Search Query
 ```sql
 SELECT a.public_id, a.url, a.title, a.section, a.published_date,
-       ts_headline('english', a.full_text, query, 'MaxWords=30, MinWords=15') as snippet
-FROM articles a, plainto_tsquery('english', :search_term) query
+       ns.id as news_source_id,
+       ts_headline('english', a.full_text, query, 'MaxWords=30, MinWords=15') as snippet,
+       COALESCE(
+         json_agg(
+           json_build_object(
+             'classifier_type', c.classifier_type,
+             'confidence', c.confidence_score
+           )
+         ) FILTER (WHERE c.id IS NOT NULL),
+         '[]'
+       ) as classifications
+FROM articles a
+CROSS JOIN plainto_tsquery('english', :search_term) query
+JOIN news_sources ns ON a.news_source_id = ns.id
+LEFT JOIN classifications c ON a.id = c.article_id
 WHERE a.search_vector @@ query
   AND (:from_date IS NULL OR a.published_date >= :from_date)
   AND (:to_date IS NULL OR a.published_date <= :to_date)
+GROUP BY a.id, a.public_id, a.url, a.title, a.section, a.published_date, a.full_text, ns.id, query
 ORDER BY ts_rank(a.search_vector, query) DESC
 LIMIT :page_size OFFSET :offset;
 ```
+
+**Note:** The `news_source_id` is mapped to `NewsSourceType` enum in the application layer:
+- `news_source_id = 1` → `"JAMAICA_GLEANER"`
 
 ### Entity Filter Query (addition)
 ```sql
