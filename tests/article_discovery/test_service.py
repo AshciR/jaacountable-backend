@@ -16,10 +16,10 @@ from src.article_persistence.repositories.news_source_repository import (
 
 @pytest_asyncio.fixture
 async def test_news_source(db_connection: asyncpg.Connection):
-    """Create a test news source in the database (Jamaica Observer)."""
+    """Create a test news source in the database."""
     news_source = NewsSource(
-        name="Jamaica Observer",
-        base_url="https://jamaicaobserver.com",
+        name="Test News Source",
+        base_url="https://test-news-source.example.com",
         crawl_delay=10,
         is_active=True,
         last_scraped_at=None,
@@ -36,7 +36,7 @@ def sample_discovered_articles(test_news_source: NewsSource):
     """Sample discovered articles for testing."""
     return [
         DiscoveredArticle(
-            url="https://jamaicaobserver.com/news/2024/01/01/sample-article-1",
+            url="https://test-news-source.example.com/news/2024/01/01/sample-article-1",
             news_source_id=test_news_source.id,
             section="news",
             discovered_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
@@ -44,7 +44,7 @@ def sample_discovered_articles(test_news_source: NewsSource):
             published_date=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
         ),
         DiscoveredArticle(
-            url="https://jamaicaobserver.com/news/2024/01/02/sample-article-2",
+            url="https://test-news-source.example.com/news/2024/01/02/sample-article-2",
             news_source_id=test_news_source.id,
             section="news",
             discovered_at=datetime(2024, 1, 2, 12, 0, 0, tzinfo=timezone.utc),
