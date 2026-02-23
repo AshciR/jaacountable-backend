@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <!-- page-sitemap entry — should be ignored -->
+  <sitemap>
+    <loc>https://www.jamaicaobserver.com/page-sitemap1.xml</loc>
+    <lastmod>2025-07-08T11:42:04+00:00</lastmod>
+  </sitemap>
+  <!-- Too old — should be excluded from June 2020 target range (even with 14d buffer) -->
+  <sitemap>
+    <loc>https://www.jamaicaobserver.com/post-sitemap1.xml</loc>
+    <lastmod>2002-03-08T00:00:04+00:00</lastmod>
+  </sitemap>
+  <!-- Within June 2020 target range — should be INCLUDED -->
+  <sitemap>
+    <loc>https://www.jamaicaobserver.com/post-sitemap320.xml</loc>
+    <lastmod>2020-06-15T00:00:04+00:00</lastmod>
+  </sitemap>
+  <!-- Within June 2020 target range — should be INCLUDED -->
+  <sitemap>
+    <loc>https://www.jamaicaobserver.com/post-sitemap321.xml</loc>
+    <lastmod>2020-06-22T00:00:04+00:00</lastmod>
+  </sitemap>
+  <!-- Too new — should be excluded from June 2020 target range (even with 14d buffer) -->
+  <sitemap>
+    <loc>https://www.jamaicaobserver.com/post-sitemap500.xml</loc>
+    <lastmod>2025-08-23T00:00:04+00:00</lastmod>
+  </sitemap>
+</sitemapindex>

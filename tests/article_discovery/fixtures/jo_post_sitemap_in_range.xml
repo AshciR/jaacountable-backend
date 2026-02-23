@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
+        xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+  <!-- All 3 URLs are within June 2020 target range -->
+  <url>
+    <loc>https://www.jamaicaobserver.com/2020/06/15/article-one-slug/</loc>
+    <lastmod>2020-06-15T10:00:00+00:00</lastmod>
+    <image:image>
+      <image:loc>https://www.jamaicaobserver.com/jamaicaobserver/news/wp-content/uploads/sites/4/2020/06/image1.jpg</image:loc>
+      <image:title><![CDATA[ Article One ]]></image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://www.jamaicaobserver.com/2020/06/16/article-two-slug/</loc>
+    <lastmod>2020-06-16T11:00:00+00:00</lastmod>
+    <image:image>
+      <image:loc>https://www.jamaicaobserver.com/jamaicaobserver/news/wp-content/uploads/sites/4/2020/06/image2.jpg</image:loc>
+      <image:title><![CDATA[ Article Two ]]></image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://www.jamaicaobserver.com/2020/06/17/article-three-slug/</loc>
+    <lastmod>2020-06-17T09:30:00+00:00</lastmod>
+    <image:image>
+      <image:loc>https://www.jamaicaobserver.com/jamaicaobserver/news/wp-content/uploads/sites/4/2020/06/image3.jpg</image:loc>
+      <image:title><![CDATA[ Article Three ]]></image:title>
+    </image:image>
+  </url>
+</urlset>
