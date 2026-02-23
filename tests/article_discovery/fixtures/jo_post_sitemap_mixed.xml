@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
+        xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+  <!-- May 31 — before June 2020 target range, should be excluded -->
+  <url>
+    <loc>https://www.jamaicaobserver.com/2020/05/31/before-start-slug/</loc>
+    <lastmod>2020-05-31T10:00:00+00:00</lastmod>
+  </url>
+  <!-- June 20 — within June 2020 target range, should be INCLUDED -->
+  <url>
+    <loc>https://www.jamaicaobserver.com/2020/06/20/first-in-range-slug/</loc>
+    <lastmod>2020-06-20T12:00:00+00:00</lastmod>
+    <image:image>
+      <image:loc>https://www.jamaicaobserver.com/jamaicaobserver/news/wp-content/uploads/sites/4/2020/06/image4.jpg</image:loc>
+      <image:title><![CDATA[ First In Range ]]></image:title>
+    </image:image>
+  </url>
+  <!-- June 21 — within June 2020 target range, should be INCLUDED -->
+  <url>
+    <loc>https://www.jamaicaobserver.com/2020/06/21/second-in-range-slug/</loc>
+    <lastmod>2020-06-21T14:00:00+00:00</lastmod>
+  </url>
+  <!-- July 1 — after June 2020 target range, should be excluded -->
+  <url>
+    <loc>https://www.jamaicaobserver.com/2020/07/01/after-end-slug/</loc>
+    <lastmod>2020-07-01T08:00:00+00:00</lastmod>
+  </url>
+</urlset>
