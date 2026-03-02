@@ -91,6 +91,27 @@ def jo_archive_page_2(fixtures_dir: Path) -> str:
     return (fixtures_dir / "jo_archive_page_2.html").read_text(encoding="utf-8")
 
 
+# ── Jamaica Gleaner sitemap fixtures ─────────────────────────────────────────
+
+
+@pytest.fixture
+def gleaner_sitemap_index(fixtures_dir: Path) -> str:
+    """Sitemap index with 2 page entries (sitemapindex format)."""
+    return (fixtures_dir / "gleaner_sitemap_index.xml").read_text(encoding="utf-8")
+
+
+@pytest.fixture
+def gleaner_sitemap_urlset_in_range(fixtures_dir: Path) -> str:
+    """Urlset with 3 news articles all within June 2020 target range."""
+    return (fixtures_dir / "gleaner_sitemap_urlset_in_range.xml").read_text(encoding="utf-8")
+
+
+@pytest.fixture
+def gleaner_sitemap_urlset_mixed(fixtures_dir: Path) -> str:
+    """Urlset with 6 entries: 2 news in range, 1 news before, 1 news after, 1 sports in range, 1 non-article URL."""
+    return (fixtures_dir / "gleaner_sitemap_urlset_mixed.xml").read_text(encoding="utf-8")
+
+
 # ── Jamaica Observer sitemap fixtures ────────────────────────────────────────
 
 
