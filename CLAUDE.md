@@ -228,12 +228,25 @@ uv run python scripts/parallel_archive_discovery.py \
 
 ### Running the Application
 
-The README indicates the project can be run via:
+**Via Google ADK web interface:**
 ```bash
 adk web
 ```
 
-This suggests the project is designed to work with Google ADK's web interface.
+**Via REST API (FastAPI development server):**
+```bash
+uv run fastapi dev src/server/app.py
+```
+
+- API available at `http://127.0.0.1:8000/`
+- Interactive docs at `http://127.0.0.1:8000/docs`
+
+**FastAPI production server:**
+```bash
+uv run fastapi run src/server/app.py
+```
+
+The FastAPI server lives in `src/server/app.py`. Add new routes there as the API grows.
 
 ### Database Management
 
