@@ -88,6 +88,23 @@ adk web
 
 This will start a web interface where you can interact with the news gathering agent.
 
+### Via REST API (FastAPI)
+
+Start the FastAPI development server:
+
+```bash
+uv run fastapi dev src/server/app.py
+```
+
+The server will be available at:
+- **API**: `http://127.0.0.1:8000/`
+- **Interactive docs**: `http://127.0.0.1:8000/docs`
+
+For production:
+```bash
+uv run fastapi run src/server/app.py
+```
+
 ## Database Management
 
 The project uses PostgreSQL for data persistence and Alembic for database migrations.
