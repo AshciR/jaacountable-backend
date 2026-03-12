@@ -22,5 +22,6 @@ wheels/
 logs/
 *.log
 
-# Classification outputs
+# Production script outputs
 scripts/production/classification/output
+scripts/production/discovery/output/

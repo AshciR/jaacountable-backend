@@ -19,3 +19,11 @@ echo ""
 
 echo ""
 echo "✓ Database initialization complete"
+
+# Optional: load seed data
+# To opt in: SEED_DB=true ./scripts/infrastructure/init-db.sh
+if [ "${SEED_DB}" = "true" ]; then
+  echo ""
+  echo "SEED_DB=true: Loading seed data..."
+  "${SCRIPT_DIR}/seed_db.sh"
+fi
