@@ -7,6 +7,7 @@ from loguru import logger
 
 from src.article_extractor.extractors.gleaner_extractor import GleanerExtractor
 from src.article_extractor.extractors.gleaner_archive_extractor import GleanerArchiveExtractor
+from src.article_extractor.extractors.jamaica_observer_extractor import JamaicaObserverExtractor
 from .base import ArticleExtractor
 from .models import ExtractedArticleContent
 
@@ -46,8 +47,7 @@ class DefaultArticleExtractionService:
         self.extractors = {
             "jamaica-gleaner.com": GleanerExtractor(),
             "gleaner.newspaperarchive.com": GleanerArchiveExtractor(),
-            # Phase 2: Add Radio Jamaica extractor
-            # 'radiojamaicanewsonline.com': RadioJamaicaExtractor(),
+            "jamaicaobserver.com": JamaicaObserverExtractor(),
         }
 
     async def __aenter__(self):
