@@ -208,6 +208,48 @@ async def count_article_entities(
     )
 
 
+async def get_article_search_vector(
+    conn: asyncpg.Connection,
+    url: str,
+):
+    """
+    Fetch the search_vector value for an article by URL.
+
+    Args:
+        conn: Database connection
+        url: Article URL to look up
+
+    Returns:
+        The tsvector value, or None if the article doesn't exist or has no vector.
+    """
+    return await conn.fetchval(
+        "SELECT search_vector FROM articles WHERE url = $1",
+        url,
+    )
+
+
+async def update_article_title(
+    conn: asyncpg.Connection,
+    article_id: int,
+    new_title: str,
+) -> None:
+    """
+    Update an article's title directly in the database.
+
+    Used in tests to verify that the search_vector trigger fires on UPDATE.
+
+    Args:
+        conn: Database connection
+        article_id: ID of the article to update
+        new_title: New title value
+    """
+    await conn.execute(
+        "UPDATE articles SET title = $1 WHERE id = $2",
+        new_title,
+        article_id,
+    )
+
+
 async def count_entity_links_by_name(
     conn: asyncpg.Connection,
     article_id: int,

@@ -1,0 +1,921 @@
+"""Tests for ArticleRepository.search_articles()."""
+
+import asyncpg
+import pytest
+from datetime import datetime, timezone
+
+from src.article_persistence.models.domain import Article, Classification
+from src.article_persistence.repositories.article_repository import ArticleRepository
+from src.article_persistence.repositories.classification_repository import ClassificationRepository
+from tests.article_persistence.utils import (
+    create_test_article,
+    create_test_article_entity,
+    create_test_entity,
+    get_article_search_vector,
+    update_article_title,
+)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+async def _insert_article_with_text(
+    conn: asyncpg.Connection,
+    url: str,
+    title: str,
+    full_text: str,
+    published_date: datetime | None = None,
+    news_source_id: int = 1,
+) -> Article:
+    """Insert an article with full_text and optional published_date."""
+    repo = ArticleRepository()
+    article = Article(
+        url=url,
+        title=title,
+        section="news",
+        full_text=full_text,
+        published_date=published_date,
+        news_source_id=news_source_id,
+    )
+    return await repo.insert_article(conn, article)
+
+
+async def _insert_classification(
+    conn: asyncpg.Connection,
+    article_id: int,
+    classifier_type: str = "CORRUPTION",
+    confidence_score: float = 0.9,
+) -> Classification:
+    repo = ClassificationRepository()
+    classification = Classification(
+        article_id=article_id,
+        classifier_type=classifier_type,
+        confidence_score=confidence_score,
+        model_name="gpt-4o-mini",
+    )
+    return await repo.insert_classification(conn, classification)
+
+
+# ---------------------------------------------------------------------------
+# Migration / trigger tests
+# ---------------------------------------------------------------------------
+
+class TestSearchArticlesMigration:
+    """Verify the search_vector column and trigger exist and work correctly."""
+
+    async def test_search_vector_populated_on_insert(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article is inserted with title and full_text
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/migration-test",
+            title="Petrojam scandal investigation",
+            full_text="The government launched a probe into Petrojam.",
+        )
+
+        # When: we check the search_vector column
+        search_vector = await get_article_search_vector(
+            db_connection, "https://example.com/migration-test"
+        )
+
+        # Then: search_vector is populated (not NULL)
+        assert search_vector is not None
+
+    async def test_search_vector_updated_on_title_change(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article is inserted
+        article = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/trigger-test",
+            title="Original title",
+            full_text="Original content",
+        )
+        original_vector = await get_article_search_vector(
+            db_connection, "https://example.com/trigger-test"
+        )
+
+        # When: the title is updated
+        await update_article_title(
+            db_connection, article.id, "Updated title with new keywords"
+        )
+        updated_vector = await get_article_search_vector(
+            db_connection, "https://example.com/trigger-test"
+        )
+
+        # Then: search_vector changes to reflect the new title
+        assert updated_vector != original_vector
+
+
+# ---------------------------------------------------------------------------
+# Full-text search tests
+# ---------------------------------------------------------------------------
+
+class TestSearchArticlesFTS:
+    """Full-text search via the q parameter."""
+
+    async def test_search_keyword_in_title_returns_match(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article whose title contains "corruption"
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/fts-title",
+            title="Corruption probe at ministry",
+            full_text="Investigators found evidence of wrongdoing.",
+        )
+        repo = ArticleRepository()
+
+        # When: we search for "corruption"
+        results, total = await repo.search_articles(db_connection, q="corruption")
+
+        # Then: the article is returned
+        assert total >= 1
+        urls = [r.url for r in results]
+        assert "https://example.com/fts-title" in urls
+
+    async def test_search_keyword_in_full_text_returns_match(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article whose body (not title) contains "embezzlement"
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/fts-body",
+            title="Minister faces inquiry",
+            full_text="Evidence of embezzlement was uncovered during the audit.",
+        )
+        repo = ArticleRepository()
+
+        # When: we search for "embezzlement"
+        results, total = await repo.search_articles(db_connection, q="embezzlement")
+
+        # Then: the article is returned
+        assert total >= 1
+        urls = [r.url for r in results]
+        assert "https://example.com/fts-body" in urls
+
+    async def test_search_returns_snippet(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article that matches the search query
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/snippet-test",
+            title="Bribery scandal exposed",
+            full_text="Officials accepted bribery payments over several years.",
+        )
+        repo = ArticleRepository()
+
+        # When: we search for "bribery"
+        results, _ = await repo.search_articles(db_connection, q="bribery")
+
+        # Then: the matching result has a non-null snippet
+        match = next(r for r in results if r.url == "https://example.com/snippet-test")
+        assert match.snippet is not None
+        assert len(match.snippet) > 0
+
+    async def test_search_no_match_returns_empty(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: the database contains articles
+        repo = ArticleRepository()
+
+        # When: we search for an extremely unlikely term
+        results, total = await repo.search_articles(
+            db_connection, q="xyzzyunlikelytermzqq"
+        )
+
+        # Then: no results and count is zero
+        assert results == []
+        assert total == 0
+
+    async def test_search_total_count_reflects_all_matches(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: three articles, two matching "accountability", one not
+        for i in range(2):
+            await _insert_article_with_text(
+                db_connection,
+                url=f"https://example.com/count-match-{i}",
+                title=f"Government accountability report {i}",
+                full_text="This concerns accountability in public office.",
+            )
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/count-nomatch",
+            title="Sports news today",
+            full_text="The cricket team won the match.",
+        )
+        repo = ArticleRepository()
+
+        # When: we search with page_size=1
+        results, total = await repo.search_articles(
+            db_connection, q="accountability", page=1, page_size=1
+        )
+
+        # Then: only 1 result returned, but total >= 2
+        assert len(results) == 1
+        assert total >= 2
+
+
+# ---------------------------------------------------------------------------
+# Browse mode (no q)
+# ---------------------------------------------------------------------------
+
+class TestSearchArticlesBrowse:
+    """Behaviour when q is omitted — returns all articles ordered by date."""
+
+    async def test_browse_without_q_returns_articles(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article exists
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/browse-test",
+            title="Browse mode article",
+            full_text="Content for browse.",
+        )
+        repo = ArticleRepository()
+
+        # When: we search with no q
+        results, total = await repo.search_articles(db_connection)
+
+        # Then: results are returned and snippet is None
+        assert total >= 1
+        match = next(
+            (r for r in results if r.url == "https://example.com/browse-test"), None
+        )
+        assert match is not None
+        assert match.snippet is None
+
+    async def test_browse_default_sort_is_published_date_desc(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: two articles with different published dates
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/browse-old",
+            title="Older article",
+            full_text="Older content.",
+            published_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
+        )
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/browse-new",
+            title="Newer article",
+            full_text="Newer content.",
+            published_date=datetime(2024, 6, 1, tzinfo=timezone.utc),
+        )
+        repo = ArticleRepository()
+
+        # When: we browse with default sort
+        results, _ = await repo.search_articles(db_connection)
+
+        # Then: newer article appears before older article
+        urls = [r.url for r in results]
+        newer_idx = next(
+            (i for i, u in enumerate(urls) if u == "https://example.com/browse-new"), None
+        )
+        older_idx = next(
+            (i for i, u in enumerate(urls) if u == "https://example.com/browse-old"), None
+        )
+        assert newer_idx is not None
+        assert older_idx is not None
+        assert newer_idx < older_idx
+
+    async def test_browse_sort_asc_returns_oldest_first(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: two articles with known published dates
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/asc-old",
+            title="Earliest article",
+            full_text="Content.",
+            published_date=datetime(2022, 3, 1, tzinfo=timezone.utc),
+        )
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/asc-new",
+            title="Latest article",
+            full_text="Content.",
+            published_date=datetime(2025, 3, 1, tzinfo=timezone.utc),
+        )
+        repo = ArticleRepository()
+
+        # When: we browse with sort=published_date, order=asc
+        results, _ = await repo.search_articles(
+            db_connection, sort="published_date", order="asc"
+        )
+
+        # Then: oldest article with a date comes before newer
+        dated = [r for r in results if r.published_date is not None]
+        dates = [r.published_date for r in dated]
+        assert dates == sorted(dates)
+
+
+# ---------------------------------------------------------------------------
+# Date filter tests
+# ---------------------------------------------------------------------------
+
+class TestSearchArticlesDateFilter:
+    """Date range filtering via from_date and to_date."""
+
+    async def test_from_date_excludes_older_articles(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: articles before and after a cutoff date
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/date-before",
+            title="Old article",
+            full_text="Content.",
+            published_date=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        )
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/date-after",
+            title="Recent article",
+            full_text="Content.",
+            published_date=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        )
+        repo = ArticleRepository()
+
+        # When: we filter from 2023-01-01
+        results, _ = await repo.search_articles(
+            db_connection,
+            from_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
+        )
+
+        # Then: old article is excluded, recent article is included
+        urls = [r.url for r in results]
+        assert "https://example.com/date-before" not in urls
+        assert "https://example.com/date-after" in urls
+
+    async def test_to_date_excludes_newer_articles(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: articles with different dates
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/todate-old",
+            title="Old article",
+            full_text="Content.",
+            published_date=datetime(2019, 6, 1, tzinfo=timezone.utc),
+        )
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/todate-new",
+            title="New article",
+            full_text="Content.",
+            published_date=datetime(2025, 6, 1, tzinfo=timezone.utc),
+        )
+        repo = ArticleRepository()
+
+        # When: we filter to_date=2020-01-01
+        results, _ = await repo.search_articles(
+            db_connection,
+            to_date=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        )
+
+        # Then: new article is excluded, old article is included
+        urls = [r.url for r in results]
+        assert "https://example.com/todate-new" not in urls
+        assert "https://example.com/todate-old" in urls
+
+    async def test_from_date_boundary_is_inclusive(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article published exactly on the from_date boundary
+        boundary = datetime(2024, 3, 15, tzinfo=timezone.utc)
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/boundary-test",
+            title="Boundary date article",
+            full_text="Content.",
+            published_date=boundary,
+        )
+        repo = ArticleRepository()
+
+        # When: we query with from_date equal to the article's published_date
+        results, _ = await repo.search_articles(db_connection, from_date=boundary)
+
+        # Then: the article is included (>= is inclusive)
+        urls = [r.url for r in results]
+        assert "https://example.com/boundary-test" in urls
+
+    async def test_combined_date_range_filters_correctly(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: articles outside and inside a date window
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/range-too-old",
+            title="Too old",
+            full_text="Content.",
+            published_date=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        )
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/range-in-window",
+            title="In window",
+            full_text="Content.",
+            published_date=datetime(2022, 6, 1, tzinfo=timezone.utc),
+        )
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/range-too-new",
+            title="Too new",
+            full_text="Content.",
+            published_date=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        )
+        repo = ArticleRepository()
+
+        # When: we filter with from_date=2022-01-01 and to_date=2023-01-01
+        results, _ = await repo.search_articles(
+            db_connection,
+            from_date=datetime(2022, 1, 1, tzinfo=timezone.utc),
+            to_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
+        )
+
+        # Then: only the in-window article is present
+        urls = [r.url for r in results]
+        assert "https://example.com/range-in-window" in urls
+        assert "https://example.com/range-too-old" not in urls
+        assert "https://example.com/range-too-new" not in urls
+
+
+# ---------------------------------------------------------------------------
+# Entity search tests
+# ---------------------------------------------------------------------------
+
+class TestSearchArticlesEntitySearch:
+    """q matches entity names as well as article text."""
+
+    async def test_search_by_entity_name_returns_article(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article linked to an entity named "Petrojam"
+        # but the article text does NOT contain the word "petrojam"
+        article = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/entity-search",
+            title="State enterprise under scrutiny",
+            full_text="The auditor general reviewed the company finances.",
+        )
+        entity = await create_test_entity(
+            db_connection,
+            name="Petrojam",
+            normalized_name="petrojam",
+        )
+        await create_test_article_entity(db_connection, article.id, entity.id)
+        repo = ArticleRepository()
+
+        # When: we search for "Petrojam"
+        results, total = await repo.search_articles(db_connection, q="Petrojam")
+
+        # Then: the article is returned even though text doesn't contain the term
+        assert total >= 1
+        urls = [r.url for r in results]
+        assert "https://example.com/entity-search" in urls
+
+    async def test_entity_search_is_case_insensitive(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an entity named "Andrew Holness"
+        article = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/entity-case",
+            title="Cabinet reshuffle announced",
+            full_text="A significant change in government positions.",
+        )
+        entity = await create_test_entity(
+            db_connection,
+            name="Andrew Holness",
+            normalized_name="andrew holness",
+        )
+        await create_test_article_entity(db_connection, article.id, entity.id)
+        repo = ArticleRepository()
+
+        # When: we search with lowercase "holness"
+        results, total = await repo.search_articles(db_connection, q="holness")
+
+        # Then: the article is still returned (ILIKE is case-insensitive)
+        assert total >= 1
+        urls = [r.url for r in results]
+        assert "https://example.com/entity-case" in urls
+
+    async def test_entity_search_returns_all_entities_for_article(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article linked to two entities, search matches only one entity name
+        article = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/entity-full-list",
+            title="Multi-entity article",
+            full_text="An investigation involving multiple parties.",
+        )
+        entity1 = await create_test_entity(
+            db_connection,
+            name="Petrojam Limited",
+            normalized_name="petrojam limited",
+        )
+        entity2 = await create_test_entity(
+            db_connection,
+            name="Ministry of Energy",
+            normalized_name="ministry of energy",
+        )
+        await create_test_article_entity(db_connection, article.id, entity1.id)
+        await create_test_article_entity(db_connection, article.id, entity2.id)
+        repo = ArticleRepository()
+
+        # When: we search for "petrojam" (matches entity1, not entity2)
+        results, _ = await repo.search_articles(db_connection, q="petrojam")
+
+        # Then: the result for this article contains BOTH entity names
+        match = next(
+            (r for r in results if r.url == "https://example.com/entity-full-list"), None
+        )
+        assert match is not None
+        assert "Petrojam Limited" in match.entities
+        assert "Ministry of Energy" in match.entities
+
+
+# ---------------------------------------------------------------------------
+# Pagination tests
+# ---------------------------------------------------------------------------
+
+class TestSearchArticlesPagination:
+    """Offset/limit pagination via page and page_size."""
+
+    async def test_page_size_limits_results(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: five articles that all share a unique keyword
+        for i in range(5):
+            await _insert_article_with_text(
+                db_connection,
+                url=f"https://example.com/paginate-{i}",
+                title=f"Uniquepaginateword article {i}",
+                full_text="Content about uniquepaginateword.",
+            )
+        repo = ArticleRepository()
+
+        # When: we search with page_size=3
+        results, _ = await repo.search_articles(
+            db_connection, q="uniquepaginateword", page=1, page_size=3
+        )
+
+        # Then: exactly 3 results are returned
+        assert len(results) == 3
+
+    async def test_page_2_returns_next_items(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: four articles matching "offsetkeyword"
+        for i in range(4):
+            await _insert_article_with_text(
+                db_connection,
+                url=f"https://example.com/offset-{i}",
+                title=f"Offsetkeyword article {i}",
+                full_text="Content about offsetkeyword.",
+            )
+        repo = ArticleRepository()
+
+        # When: page 1 and page 2 are fetched with page_size=2
+        page1_results, _ = await repo.search_articles(
+            db_connection, q="offsetkeyword", page=1, page_size=2
+        )
+        page2_results, _ = await repo.search_articles(
+            db_connection, q="offsetkeyword", page=2, page_size=2
+        )
+
+        # Then: pages are non-overlapping
+        page1_urls = {r.url for r in page1_results}
+        page2_urls = {r.url for r in page2_results}
+        assert page1_urls.isdisjoint(page2_urls)
+
+    async def test_total_count_reflects_all_matches_not_page(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: six articles matching "totalcountword"
+        for i in range(6):
+            await _insert_article_with_text(
+                db_connection,
+                url=f"https://example.com/totalcount-{i}",
+                title=f"Totalcountword article {i}",
+                full_text="Content about totalcountword.",
+            )
+        repo = ArticleRepository()
+
+        # When: we fetch page 1 with page_size=2
+        results, total = await repo.search_articles(
+            db_connection, q="totalcountword", page=1, page_size=2
+        )
+
+        # Then: 2 results returned but total reflects all 6 matches
+        assert len(results) == 2
+        assert total == 6
+
+
+# ---------------------------------------------------------------------------
+# Aggregate tests (classifications + entities)
+# ---------------------------------------------------------------------------
+
+class TestSearchArticlesAggregates:
+    """classifications and entities are properly aggregated per result."""
+
+    async def test_classifications_are_aggregated(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with two classifications
+        article = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/agg-classifications",
+            title="Classified article aggregation",
+            full_text="This article was classified by two classifiers.",
+        )
+        await _insert_classification(
+            db_connection, article.id, classifier_type="CORRUPTION", confidence_score=0.9
+        )
+        await _insert_classification(
+            db_connection, article.id, classifier_type="HURRICANE_RELIEF", confidence_score=0.7
+        )
+        repo = ArticleRepository()
+
+        # When: we search for this article
+        results, _ = await repo.search_articles(db_connection, q="aggregation")
+
+        # Then: both classifications appear in the result
+        match = next(
+            (r for r in results if r.url == "https://example.com/agg-classifications"), None
+        )
+        assert match is not None
+        assert len(match.classifications) == 2
+        types = {c.classifier_type for c in match.classifications}
+        assert "CORRUPTION" in types
+        assert "HURRICANE_RELIEF" in types
+
+    async def test_entities_are_aggregated(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article linked to two entities
+        article = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/agg-entities",
+            title="Entities aggregation test",
+            full_text="Multiple entities are associated with this story.",
+        )
+        e1 = await create_test_entity(
+            db_connection, name="Alpha Corp", normalized_name="alpha corp"
+        )
+        e2 = await create_test_entity(
+            db_connection, name="Beta Ltd", normalized_name="beta ltd"
+        )
+        await create_test_article_entity(db_connection, article.id, e1.id)
+        await create_test_article_entity(db_connection, article.id, e2.id)
+        repo = ArticleRepository()
+
+        # When: we search for the article
+        results, _ = await repo.search_articles(db_connection, q="aggregation")
+
+        # Then: both entity names appear in the result
+        match = next(
+            (r for r in results if r.url == "https://example.com/agg-entities"), None
+        )
+        assert match is not None
+        assert "Alpha Corp" in match.entities
+        assert "Beta Ltd" in match.entities
+
+    async def test_article_without_classifications_has_empty_list(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with no classifications
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/no-classifications",
+            title="Unclassified article noclassword",
+            full_text="This article has no classifications.",
+        )
+        repo = ArticleRepository()
+
+        # When: we search for it
+        results, _ = await repo.search_articles(db_connection, q="noclassword")
+
+        # Then: classifications is an empty list (not None)
+        match = next(
+            (r for r in results if r.url == "https://example.com/no-classifications"), None
+        )
+        assert match is not None
+        assert match.classifications == []
+
+    async def test_article_without_entities_has_empty_list(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with no entities
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/no-entities",
+            title="No entities article noentityword",
+            full_text="This article has no linked entities.",
+        )
+        repo = ArticleRepository()
+
+        # When: we search for it
+        results, _ = await repo.search_articles(db_connection, q="noentityword")
+
+        # Then: entities is an empty list (not None)
+        match = next(
+            (r for r in results if r.url == "https://example.com/no-entities"), None
+        )
+        assert match is not None
+        assert match.entities == []
+
+
+# ---------------------------------------------------------------------------
+# include_full_text toggle
+# ---------------------------------------------------------------------------
+
+class TestSearchArticlesFullText:
+    """full_text field is controlled by include_full_text parameter."""
+
+    async def test_include_full_text_false_returns_none(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with full_text content
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/ft-false",
+            title="Full text false test ftfalseword",
+            full_text="This is the full article text that should be hidden.",
+        )
+        repo = ArticleRepository()
+
+        # When: we search without include_full_text (default False)
+        results, _ = await repo.search_articles(
+            db_connection, q="ftfalseword", include_full_text=False
+        )
+
+        # Then: full_text is None on the result
+        match = next(
+            (r for r in results if r.url == "https://example.com/ft-false"), None
+        )
+        assert match is not None
+        assert match.full_text is None
+
+    async def test_include_full_text_true_returns_content(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with full_text content
+        expected_text = "This is the full article text that should be visible."
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/ft-true",
+            title="Full text true test fttrueword",
+            full_text=expected_text,
+        )
+        repo = ArticleRepository()
+
+        # When: we search with include_full_text=True
+        results, _ = await repo.search_articles(
+            db_connection, q="fttrueword", include_full_text=True
+        )
+
+        # Then: full_text is populated on the result
+        match = next(
+            (r for r in results if r.url == "https://example.com/ft-true"), None
+        )
+        assert match is not None
+        assert match.full_text == expected_text
+
+
+# ---------------------------------------------------------------------------
+# Edge cases
+# ---------------------------------------------------------------------------
+
+class TestSearchArticlesEdgeCases:
+    """Edge cases and combined filter scenarios."""
+
+    async def test_empty_string_q_treated_as_browse(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article exists
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/empty-q",
+            title="Empty q test article",
+            full_text="Content.",
+        )
+        repo = ArticleRepository()
+
+        # When: we search with q="" (empty string)
+        results, total = await repo.search_articles(db_connection, q="")
+
+        # Then: falls back to browse mode (does not crash), snippet is None
+        assert total >= 1
+        assert all(r.snippet is None for r in results)
+
+    async def test_all_filters_combined(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: a matching article (text + date window)
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/combined",
+            title="Combined filters uniquecombinedword",
+            full_text="Content with uniquecombinedword in range.",
+            published_date=datetime(2023, 6, 1, tzinfo=timezone.utc),
+        )
+        # And an article outside the date window with the same keyword
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/combined-out",
+            title="Combined filters uniquecombinedword outside range",
+            full_text="Content with uniquecombinedword outside range.",
+            published_date=datetime(2021, 1, 1, tzinfo=timezone.utc),
+        )
+        repo = ArticleRepository()
+
+        # When: we search with q + date range
+        results, total = await repo.search_articles(
+            db_connection,
+            q="uniquecombinedword",
+            from_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            to_date=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        )
+
+        # Then: only the in-range article is returned
+        urls = [r.url for r in results]
+        assert "https://example.com/combined" in urls
+        assert "https://example.com/combined-out" not in urls
+        assert total == 1
+
+    async def test_relevance_sort_without_q_falls_back_to_date(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: two articles with different published dates
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/relevance-fallback-old",
+            title="Relevance fallback old",
+            full_text="Content.",
+            published_date=datetime(2021, 1, 1, tzinfo=timezone.utc),
+        )
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/relevance-fallback-new",
+            title="Relevance fallback new",
+            full_text="Content.",
+            published_date=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        )
+        repo = ArticleRepository()
+
+        # When: no q but sort=relevance (should fall back to published_date desc)
+        results, _ = await repo.search_articles(
+            db_connection, q=None, sort="relevance", order="desc"
+        )
+
+        # Then: newer article comes before older (date desc fallback)
+        urls = [r.url for r in results]
+        new_idx = next(
+            (i for i, u in enumerate(urls) if u == "https://example.com/relevance-fallback-new"),
+            None,
+        )
+        old_idx = next(
+            (i for i, u in enumerate(urls) if u == "https://example.com/relevance-fallback-old"),
+            None,
+        )
+        assert new_idx is not None
+        assert old_idx is not None
+        assert new_idx < old_idx

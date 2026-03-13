@@ -170,6 +170,32 @@ class Entity(BaseModel):
         return v.strip()
 
 
+class SearchClassification(BaseModel):
+    """Classification summary embedded in ArticleSearchResult."""
+
+    classifier_type: str
+    confidence_score: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ArticleSearchResult(BaseModel):
+    """Result model for full-text article search queries."""
+
+    public_id: UUID
+    url: str
+    title: str
+    section: str
+    published_date: datetime | None
+    news_source_id: int
+    snippet: str | None  # ts_headline output; None when q is absent
+    entities: list[str]  # entity display names
+    classifications: list[SearchClassification]
+    full_text: str | None = None  # Only when include_full_text=True
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ArticleEntity(BaseModel):
     """
     Many-to-many association between articles and entities.
