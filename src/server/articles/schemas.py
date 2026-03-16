@@ -1,10 +1,11 @@
 """API schemas for the articles domain."""
 import math
 from datetime import datetime
+from enum import Enum
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ArticleSearchParams(BaseModel):
@@ -29,22 +30,42 @@ class SearchClassificationSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class NewsSource(str, Enum):
+    JAMAICA_GLEANER = "JAMAICA_GLEANER"
+    JAMAICA_OBSERVER = "JAMAICA_OBSERVER"
+
+
+_NEWS_SOURCE_MAP: dict[int, NewsSource] = {
+    1: NewsSource.JAMAICA_GLEANER,
+    2: NewsSource.JAMAICA_OBSERVER,
+}
+
+
 class ArticleSearchResultSchema(BaseModel):
     """Single article result returned by the search endpoint."""
 
-    public_id: UUID
+    id: UUID = Field(validation_alias="public_id")
     url: str
     title: str
     section: str
     published_date: datetime | None
-    news_source_id: int
+    news_source: NewsSource = Field(validation_alias="news_source_id")
     snippet: str | None
     entities: list[str]
     classifications: list[SearchClassificationSchema]
     full_text: str | None = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
+    @field_validator("news_source", mode="before")
+    @classmethod
+    def map_news_source(cls, v: int | str | NewsSource) -> NewsSource:
+        if isinstance(v, int):
+            mapped = _NEWS_SOURCE_MAP.get(v)
+            if mapped is None:
+                raise ValueError(f"Unknown news_source_id: {v}")
+            return mapped
+        return NewsSource(v)
 
 class ArticleSearchResponse(BaseModel):
     """Paginated article search response."""

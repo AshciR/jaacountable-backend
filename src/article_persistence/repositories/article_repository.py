@@ -191,19 +191,27 @@ class ArticleRepository:
         else:
             snippet_col = "NULL::text as snippet"
 
+        # --- Classifications CTE ---
+        classifications_cte = """
+            article_classifications AS (
+                SELECT
+                    article_id,
+                    jsonb_agg(jsonb_build_object(
+                        'classifier_type', classifier_type,
+                        'confidence_score', confidence_score
+                    )) AS classifications
+                FROM classifications
+                GROUP BY article_id
+            )
+        """
+
         select_clause = f"""
             a.public_id, a.url, a.title, a.section, a.published_date,
             ns.id as news_source_id,
             {snippet_col},
             {full_text_col},
             COALESCE(array_agg(DISTINCT e.name) FILTER (WHERE e.id IS NOT NULL), '{{}}') as entities,
-            COALESCE(
-                json_agg(json_build_object(
-                    'classifier_type', c.classifier_type,
-                    'confidence_score', c.confidence_score
-                )) FILTER (WHERE c.id IS NOT NULL),
-                '[]'
-            ) as classifications
+            COALESCE(ac.classifications, '[]') as classifications
         """
 
         # --- FROM / JOIN clause ---
@@ -212,7 +220,7 @@ class ArticleRepository:
                 FROM articles a
                 CROSS JOIN plainto_tsquery('english', {q_param}) query
                 JOIN news_sources ns ON a.news_source_id = ns.id
-                LEFT JOIN classifications c ON a.id = c.article_id
+                LEFT JOIN article_classifications ac ON a.id = ac.article_id
                 LEFT JOIN article_entities ae ON a.id = ae.article_id
                 LEFT JOIN entities e ON ae.entity_id = e.id
             """
@@ -220,7 +228,7 @@ class ArticleRepository:
             from_clause = """
                 FROM articles a
                 JOIN news_sources ns ON a.news_source_id = ns.id
-                LEFT JOIN classifications c ON a.id = c.article_id
+                LEFT JOIN article_classifications ac ON a.id = ac.article_id
                 LEFT JOIN article_entities ae ON a.id = ae.article_id
                 LEFT JOIN entities e ON ae.entity_id = e.id
             """
@@ -247,7 +255,7 @@ class ArticleRepository:
         where_sql = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
 
         # --- GROUP BY ---
-        group_by = "GROUP BY a.id, a.public_id, a.url, a.title, a.section, a.published_date, a.full_text, ns.id"
+        group_by = "GROUP BY a.id, a.public_id, a.url, a.title, a.section, a.published_date, a.full_text, ns.id, ac.classifications"
         if use_fts:
             group_by += ", query"
 
@@ -264,6 +272,7 @@ class ArticleRepository:
 
         # --- Main query ---
         main_sql = f"""
+            WITH {classifications_cte}
             SELECT {select_clause}
             {from_clause}
             {where_sql}
@@ -276,6 +285,7 @@ class ArticleRepository:
         # params without the trailing limit/offset values
         count_params = params[:-2]
         count_sql = f"""
+            WITH {classifications_cte}
             SELECT COUNT(DISTINCT a.id)
             {from_clause}
             {where_sql}

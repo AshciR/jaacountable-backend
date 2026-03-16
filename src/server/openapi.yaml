@@ -9,12 +9,12 @@ servers:
     description: API v1
 
 paths:
-  /articles/search:
+  /articles:
     get:
       summary: Search articles
       description: |
         Search for articles using full-text search (PostgreSQL FTS on title + full_text),
-        with optional filtering by entity, date range, and sorting options.
+        with optional filtering by date range and sorting options.
       operationId: searchArticles
       tags:
         - Articles
@@ -27,22 +27,14 @@ paths:
             type: string
           example: corruption
 
-        - name: entity
-          in: query
-          description: Filter by entity name (partial match)
-          required: false
-          schema:
-            type: string
-          example: Ministry of Finance
-
         - name: from_date
           in: query
           description: Articles published on or after this date
           required: false
           schema:
             type: string
-            format: date
-          example: '2024-01-01'
+            format: date-time
+          example: '2024-01-01T00:00:00Z'
 
         - name: to_date
           in: query
@@ -50,8 +42,8 @@ paths:
           required: false
           schema:
             type: string
-            format: date
-          example: '2024-12-31'
+            format: date-time
+          example: '2024-12-31T23:59:59Z'
 
         - name: include_full_text
           in: query
@@ -108,7 +100,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SearchResponse'
+                $ref: '#/components/schemas/ArticleSearchResponse'
 
         '400':
           description: Invalid query parameters (bad date format, page < 1, etc.)
@@ -209,21 +201,35 @@ components:
   schemas:
     # ── Article Search ──────────────────────────────────────────────
 
-    SearchResponse:
+    ArticleSearchResponse:
       type: object
       required:
-        - data
-        - pagination
-        - query
+        - items
+        - total
+        - page
+        - page_size
+        - pages
       properties:
-        data:
+        items:
           type: array
           items:
             $ref: '#/components/schemas/Article'
-        pagination:
-          $ref: '#/components/schemas/Pagination'
-        query:
-          $ref: '#/components/schemas/SearchQueryEcho'
+        total:
+          type: integer
+          description: Total number of matching results
+          example: 150
+        page:
+          type: integer
+          description: Current page number
+          example: 1
+        page_size:
+          type: integer
+          description: Number of results per page
+          example: 20
+        pages:
+          type: integer
+          description: Total number of pages
+          example: 8
 
     Article:
       type: object
@@ -241,7 +247,7 @@ components:
         id:
           type: string
           format: uuid
-          description: Unique article identifier
+          description: Public article identifier (UUID)
           example: 550e8400-e29b-41d4-a716-446655440000
         url:
           type: string
@@ -258,15 +264,20 @@ components:
           example: news
         news_source:
           type: string
-          description: Source identifier for the news outlet
+          enum:
+            - JAMAICA_GLEANER
+            - JAMAICA_OBSERVER
+          description: News outlet identifier
           example: JAMAICA_GLEANER
         published_date:
           type: string
           format: date-time
+          nullable: true
           description: Article publication date
           example: '2024-01-15T10:30:00Z'
         snippet:
           type: string
+          nullable: true
           description: Highlighted excerpt with search terms marked
           example: '...highlighted excerpt with <mark>search terms</mark>...'
         entities:
@@ -284,49 +295,26 @@ components:
           description: List of article classifications with confidence scores
         full_text:
           type: string
+          nullable: true
           description: Full article text (only included if include_full_text=true)
 
     Classification:
       type: object
       required:
         - classifier_type
-        - confidence
+        - confidence_score
       properties:
         classifier_type:
           type: string
           description: Type of classification
           example: CORRUPTION
-        confidence:
+        confidence_score:
           type: number
           format: float
           minimum: 0
           maximum: 1
           description: Confidence score for the classification
           example: 0.92
-
-    SearchQueryEcho:
-      type: object
-      properties:
-        q:
-          type: string
-          nullable: true
-          description: The search query that was used
-          example: corruption
-        from_date:
-          type: string
-          format: date
-          nullable: true
-          description: The from_date filter that was applied
-          example: '2024-01-01'
-        to_date:
-          type: string
-          format: date
-          nullable: true
-          description: The to_date filter that was applied
-        entity:
-          type: string
-          nullable: true
-          description: The entity filter that was applied
 
     # ── Entities ────────────────────────────────────────────────────
 
