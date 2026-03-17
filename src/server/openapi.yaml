@@ -207,7 +207,7 @@ components:
         - items
         - total
         - page
-        - page_size
+        - pageSize
         - pages
       properties:
         items:
@@ -222,7 +222,7 @@ components:
           type: integer
           description: Current page number
           example: 1
-        page_size:
+        pageSize:
           type: integer
           description: Number of results per page
           example: 20
@@ -238,8 +238,8 @@ components:
         - url
         - title
         - section
-        - news_source
-        - published_date
+        - newsSource
+        - publishedDate
         - snippet
         - entities
         - classifications
@@ -262,14 +262,14 @@ components:
           type: string
           description: Article section/category
           example: news
-        news_source:
+        newsSource:
           type: string
           enum:
             - JAMAICA_GLEANER
             - JAMAICA_OBSERVER
           description: News outlet identifier
           example: JAMAICA_GLEANER
-        published_date:
+        publishedDate:
           type: string
           format: date-time
           nullable: true
@@ -293,7 +293,7 @@ components:
           items:
             $ref: '#/components/schemas/Classification'
           description: List of article classifications with confidence scores
-        full_text:
+        fullText:
           type: string
           nullable: true
           description: Full article text (only included if include_full_text=true)
@@ -301,14 +301,14 @@ components:
     Classification:
       type: object
       required:
-        - classifier_type
-        - confidence_score
+        - classifierType
+        - confidenceScore
       properties:
-        classifier_type:
+        classifierType:
           type: string
           description: Type of classification
           example: CORRUPTION
-        confidence_score:
+        confidenceScore:
           type: number
           format: float
           minimum: 0
@@ -338,23 +338,23 @@ components:
       type: object
       required:
         - name
-        - normalized_name
-        - article_count
-        - last_seen_date
+        - normalizedName
+        - articleCount
+        - lastSeenDate
       properties:
         name:
           type: string
           description: Display name of the entity as originally extracted
           example: Ministry of Finance
-        normalized_name:
+        normalizedName:
           type: string
           description: Normalized canonical name used for deduplication
           example: ministry_of_finance
-        article_count:
+        articleCount:
           type: integer
           description: Number of articles this entity appears in (scoped by time window if since is provided)
           example: 32
-        last_seen_date:
+        lastSeenDate:
           type: string
           format: date-time
           description: Most recent article publication date featuring this entity (scoped by time window if since is provided)
@@ -383,23 +383,23 @@ components:
       type: object
       required:
         - page
-        - page_size
-        - total_results
-        - total_pages
+        - pageSize
+        - totalResults
+        - totalPages
       properties:
         page:
           type: integer
           description: Current page number
           example: 1
-        page_size:
+        pageSize:
           type: integer
           description: Number of results per page
           example: 20
-        total_results:
+        totalResults:
           type: integer
           description: Total number of matching results
           example: 150
-        total_pages:
+        totalPages:
           type: integer
           description: Total number of pages
           example: 8
