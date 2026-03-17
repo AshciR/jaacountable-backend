@@ -45,12 +45,14 @@ async def _insert_classification(
     article_id: int,
     classifier_type: str = "CORRUPTION",
     confidence_score: float = 0.9,
+    reasoning: str | None = None,
 ) -> Classification:
     repo = ClassificationRepository()
     classification = Classification(
         article_id=article_id,
         classifier_type=classifier_type,
         confidence_score=confidence_score,
+        reasoning=reasoning,
         model_name="gpt-4o-mini",
     )
     return await repo.insert_classification(conn, classification)
@@ -646,6 +648,40 @@ class TestSearchArticlesAggregates:
         types = {c.classifier_type for c in match.classifications}
         assert "CORRUPTION" in types
         assert "HURRICANE_RELIEF" in types
+
+    async def test_classification_reasoning_is_included(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with a classification that has reasoning
+        article = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/reasoning-test",
+            title="Article with reasoning",
+            full_text="This article has a classification with reasoning attached.",
+        )
+        await _insert_classification(
+            db_connection,
+            article.id,
+            classifier_type="CORRUPTION",
+            confidence_score=0.85,
+            reasoning="Article directly discusses government corruption.",
+        )
+        service = ArticleSearchService()
+
+        # When: we search for this article
+        results, _ = await service.search(
+            db_connection, ArticleSearchParams(q="reasoning")
+        )
+
+        # Then: the classification includes the reasoning text
+        match = next(
+            (r for r in results if r.url == "https://example.com/reasoning-test"), None
+        )
+        assert match is not None
+        assert len(match.classifications) == 1
+        cls = match.classifications[0]
+        assert cls.reasoning == "Article directly discusses government corruption."
 
     async def test_entities_are_aggregated(
         self,
