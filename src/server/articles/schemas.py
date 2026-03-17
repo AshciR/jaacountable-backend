@@ -6,6 +6,7 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic.alias_generators import to_camel
 
 
 class ArticleSearchParams(BaseModel):
@@ -28,7 +29,7 @@ class SearchClassificationSchema(BaseModel):
     confidence_score: float
     reasoning: str | None = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, alias_generator=to_camel, populate_by_name=True)
 
 
 class NewsSource(str, Enum):
@@ -56,7 +57,7 @@ class ArticleSearchResultSchema(BaseModel):
     classifications: list[SearchClassificationSchema]
     full_text: str | None = None
 
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = ConfigDict(from_attributes=True, alias_generator=to_camel, populate_by_name=True)
 
     @field_validator("news_source", mode="before")
     @classmethod
@@ -76,6 +77,8 @@ class ArticleSearchResponse(BaseModel):
     page: int
     page_size: int
     pages: int
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     @classmethod
     def build(

@@ -396,6 +396,20 @@ The project also includes an evaluation set (`v1.evalset.json`) for testing agen
 
 ## Important Implementation Details
 
+### API Response Schemas
+- **camelCase JSON**: All API response schemas must use camelCase field names in JSON output
+- Use `alias_generator=to_camel` from `pydantic.alias_generators` in `ConfigDict` on every response schema
+- Always include `populate_by_name=True` so internal Python code can still use snake_case attributes
+- Query parameter schemas (e.g. `*Params`) are exempt — keep snake_case for URL query strings
+- Example:
+  ```python
+  from pydantic.alias_generators import to_camel
+
+  class MyResponseSchema(BaseModel):
+      model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+      some_field: str  # serializes as "someField" in JSON
+  ```
+
 ### Database Architecture
 - **Raw SQL Approach**: Uses manual SQL DDL in Alembic migrations, NOT SQLAlchemy ORM models
 - **Async Operations**: All database operations use asyncpg for async/await patterns
