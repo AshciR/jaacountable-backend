@@ -198,7 +198,8 @@ class ArticleRepository:
                     article_id,
                     jsonb_agg(jsonb_build_object(
                         'classifier_type', classifier_type,
-                        'confidence_score', confidence_score
+                        'confidence_score', confidence_score,
+                        'reasoning', reasoning
                     )) AS classifications
                 FROM classifications
                 GROUP BY article_id

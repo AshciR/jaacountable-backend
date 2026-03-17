@@ -175,6 +175,7 @@ class SearchClassification(BaseModel):
 
     classifier_type: str
     confidence_score: float
+    reasoning: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
