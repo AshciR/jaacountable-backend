@@ -203,13 +203,13 @@ class TestSearchArticlesBrowse:
         # When: we search with no q
         results, total = await service.search(db_connection, ArticleSearchParams())
 
-        # Then: results are returned and snippet is None
+        # Then: results are returned and snippet is the first 600 chars of full_text
         assert total >= 1
         match = next(
             (r for r in results if r.url == "https://example.com/browse-test"), None
         )
         assert match is not None
-        assert match.snippet is None
+        assert match.snippet == "Content for browse."
 
     async def test_browse_default_sort_is_published_date_desc(
         self,
@@ -854,9 +854,9 @@ class TestSearchArticlesEdgeCases:
             db_connection, ArticleSearchParams(q="")
         )
 
-        # Then: falls back to browse mode (does not crash), snippet is None
+        # Then: falls back to browse mode (does not crash), snippet is the first 600 chars of full_text
         assert total >= 1
-        assert all(r.snippet is None for r in results)
+        assert all(r.snippet is not None for r in results)
 
     async def test_all_filters_combined(
         self,
