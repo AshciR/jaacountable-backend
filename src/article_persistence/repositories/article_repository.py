@@ -187,9 +187,9 @@ class ArticleRepository:
 
         if use_fts:
             q_param = track_param_count(q)
-            snippet_col = f"ts_headline('english', a.full_text, query, 'MaxWords=30, MinWords=15') as snippet"
+            snippet_col = f"ts_headline('english', a.full_text, query, 'MaxWords=100, MinWords=50') as snippet"
         else:
-            snippet_col = "NULL::text as snippet"
+            snippet_col = "LEFT(a.full_text, 600) as snippet"
 
         # --- Classifications CTE ---
         classifications_cte = """
