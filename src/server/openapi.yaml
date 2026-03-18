@@ -321,18 +321,32 @@ components:
     EntityListResponse:
       type: object
       required:
-        - data
-        - pagination
-        - query
+        - items
+        - total
+        - page
+        - pageSize
+        - pages
       properties:
-        data:
+        items:
           type: array
           items:
             $ref: '#/components/schemas/EntitySummary'
-        pagination:
-          $ref: '#/components/schemas/Pagination'
-        query:
-          $ref: '#/components/schemas/EntityQueryEcho'
+        total:
+          type: integer
+          description: Total number of matching results
+          example: 150
+        page:
+          type: integer
+          description: Current page number
+          example: 1
+        pageSize:
+          type: integer
+          description: Number of results per page
+          example: 20
+        pages:
+          type: integer
+          description: Total number of pages
+          example: 8
 
     EntitySummary:
       type: object
@@ -360,49 +374,7 @@ components:
           description: Most recent article publication date featuring this entity (scoped by time window if since is provided)
           example: '2024-02-14T09:15:00Z'
 
-    EntityQueryEcho:
-      type: object
-      properties:
-        sort:
-          type: string
-          enum:
-            - latest
-            - most_found
-          description: The sort mode that was applied
-          example: latest
-        since:
-          type: string
-          format: date
-          nullable: true
-          description: The time-window filter that was applied
-          example: '2024-01-01'
-
     # ── Shared ──────────────────────────────────────────────────────
-
-    Pagination:
-      type: object
-      required:
-        - page
-        - pageSize
-        - totalResults
-        - totalPages
-      properties:
-        page:
-          type: integer
-          description: Current page number
-          example: 1
-        pageSize:
-          type: integer
-          description: Number of results per page
-          example: 20
-        totalResults:
-          type: integer
-          description: Total number of matching results
-          example: 150
-        totalPages:
-          type: integer
-          description: Total number of pages
-          example: 8
 
     Error:
       type: object

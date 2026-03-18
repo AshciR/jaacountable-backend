@@ -1,9 +1,9 @@
+from datetime import date, datetime, timezone
 from pathlib import Path
-from datetime import datetime, timezone
 import aiosql
 import asyncpg
 
-from src.article_persistence.models.domain import Entity
+from src.article_persistence.models.domain import Entity, EntityListResult
 
 
 class EntityRepository:
@@ -88,6 +88,77 @@ class EntityRepository:
         )
 
         return [Entity.model_validate(dict(row)) for row in results]
+
+    async def list_entities(
+        self,
+        conn: asyncpg.Connection,
+        sort: str = "latest",
+        since: date | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[EntityListResult], int]:
+        """
+        List entities with aggregated article counts and recency data.
+
+        Args:
+            conn: Database connection to use for the query
+            sort: "latest" orders by most recent article date; "most_found" orders by article count
+            since: When provided, scope article_count and last_seen_date to articles on/after this date
+            page: 1-indexed page number
+            page_size: Number of results per page
+
+        Returns:
+            Tuple of (results, total_count) for pagination
+        """
+        params: list = []
+        param_idx = 0
+
+        def track(value) -> str:
+            nonlocal param_idx
+            param_idx += 1
+            params.append(value)
+            return f"${param_idx}"
+
+        where_parts = ["a.published_date IS NOT NULL"]
+        if since is not None:
+            since_dt = datetime(since.year, since.month, since.day, tzinfo=timezone.utc)
+            where_parts.append(f"a.published_date >= {track(since_dt)}")
+        where_sql = "WHERE " + " AND ".join(where_parts)
+
+        order_col = "last_seen_date" if sort == "latest" else "article_count"
+
+        offset = (page - 1) * page_size
+        limit_param = track(page_size)
+        offset_param = track(offset)
+
+        main_sql = f"""
+            SELECT
+                e.name,
+                e.normalized_name,
+                COUNT(ae.article_id) AS article_count,
+                MAX(a.published_date) AS last_seen_date
+            FROM entities e
+            JOIN article_entities ae ON ae.entity_id = e.id
+            JOIN articles a ON a.id = ae.article_id
+            {where_sql}
+            GROUP BY e.id, e.name, e.normalized_name
+            ORDER BY {order_col} DESC
+            LIMIT {limit_param} OFFSET {offset_param}
+        """
+
+        count_params = params[:-2]
+        count_sql = f"""
+            SELECT COUNT(DISTINCT e.id)
+            FROM entities e
+            JOIN article_entities ae ON ae.entity_id = e.id
+            JOIN articles a ON a.id = ae.article_id
+            {where_sql}
+        """
+
+        rows = await conn.fetch(main_sql, *params)
+        total_count = await conn.fetchval(count_sql, *count_params)
+
+        return [EntityListResult.model_validate(dict(row)) for row in rows], (total_count or 0)
 
     async def find_article_ids_by_entity_id(
         self,
