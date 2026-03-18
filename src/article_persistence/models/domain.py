@@ -197,6 +197,17 @@ class ArticleSearchResult(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class EntityListResult(BaseModel):
+    """Result model for entity list queries with aggregated article counts."""
+
+    name: str
+    normalized_name: str
+    article_count: int
+    last_seen_date: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ArticleEntity(BaseModel):
     """
     Many-to-many association between articles and entities.
