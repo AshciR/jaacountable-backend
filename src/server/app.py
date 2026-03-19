@@ -5,6 +5,9 @@ from fastapi import FastAPI
 
 from config.database import db_config
 from src.server.articles.router import router as articles_router
+from src.server.entities.router import router as entities_router
+
+API_V1_PREFIX = "/api/v1"
 
 
 @asynccontextmanager
@@ -16,7 +19,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-app.include_router(articles_router, prefix="/api/v1")
+app.include_router(articles_router, prefix=API_V1_PREFIX)
+app.include_router(entities_router, prefix=API_V1_PREFIX)
 
 
 @app.get("/")
