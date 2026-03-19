@@ -1,6 +1,7 @@
 """Utility functions for repository tests."""
 
 import asyncpg
+from datetime import datetime, timezone
 
 from src.article_persistence.models.domain import Article, ArticleEntity, Entity, NewsSource
 from src.article_persistence.repositories.article_repository import ArticleRepository
@@ -115,6 +116,25 @@ async def create_test_article_entity(
         classifier_type=classifier_type,
     )
     return await repository.link_article_to_entity(conn, article_entity)
+
+
+async def insert_article_with_date(
+    conn: asyncpg.Connection,
+    url: str,
+    published_date: datetime = datetime(2024, 1, 1, tzinfo=timezone.utc),
+    news_source_id: int = 1,
+) -> Article:
+    """Insert a minimal article with a specific published_date."""
+    article_repo = ArticleRepository()
+    article = Article(
+        url=url,
+        title="Test article",
+        section="news",
+        full_text="Some content.",
+        published_date=published_date,
+        news_source_id=news_source_id,
+    )
+    return await article_repo.insert_article(conn, article)
 
 
 async def delete_article(
