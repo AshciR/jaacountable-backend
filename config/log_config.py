@@ -70,6 +70,7 @@ def configure_logging(
             "<level>{level: <8}</level> | "
             "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
             "<level>{message}</level>"
+            "<dim>{extra}</dim>"
         )
         logger.add(
             sys.stderr,
@@ -118,6 +119,12 @@ def configure_logging(
 
     # Set up interception for all existing loggers
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
+
+    # Replace uvicorn's own handlers so logs don't appear twice
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        uv_logger = logging.getLogger(name)
+        uv_logger.handlers = [InterceptHandler()]
+        uv_logger.propagate = False
 
     # Suppress overly verbose third-party loggers
     logging.getLogger("httpx").setLevel(logging.WARNING)
