@@ -5,6 +5,7 @@ from fastapi import FastAPI
 
 from config.database import db_config
 from config.log_config import configure_logging
+from src.analytics.client import analytics_client
 from src.server.articles.router import router as articles_router
 from src.server.entities.router import router as entities_router
 from src.server.middleware import CanonicalLogMiddleware
@@ -16,8 +17,10 @@ API_V1_PREFIX = "/api/v1"
 async def lifespan(app: FastAPI):
     await db_config.create_pool()
     app.state.db_config = db_config
+    app.state.analytics_client = analytics_client
     yield
     await db_config.close_pool()
+    analytics_client.shutdown()
 
 
 configure_logging()

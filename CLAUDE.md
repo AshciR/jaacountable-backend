@@ -25,6 +25,48 @@ This is a Python backend project called "jaacountable-backend" that implements a
   - `alembic/versions/` - Migration files with raw SQL
   - `scripts/` - Helper scripts for database operations
 
+### Analytics System
+
+The project uses PostHog for server-side event tracking via a thin `AnalyticsClient` wrapper.
+
+**Key files:**
+- `src/analytics/client.py` — `AnalyticsClient` class + module-level `analytics_client` instance
+- `src/server/dependencies.py` — `get_analytics(request)` FastAPI dependency
+- `src/server/app.py` — wires `analytics_client` into `app.state` at startup and calls `shutdown()` at teardown
+
+**Event naming conventions:**
+- Event names: `category:object_action` pattern, lowercase snake_case (e.g., `search:query_submit`)
+- Property names: `object_adjective` pattern (e.g., `search_query`, `results_count`)
+- Boolean properties: `is_` or `has_` prefix (e.g., `is_internal`, `has_results`)
+
+**Common properties** — every event automatically gets these via `capture_with_common_props()`:
+- `environment` — from `APP_ENV` env var (default: `"development"`)
+- `is_internal` — from `analytics.is_internal_request(request)` (detects `X-Internal-Request: true` header)
+
+**How to add a new event:**
+```python
+analytics.capture_with_common_props(
+    distinct_id=analytics.get_distinct_id(request),
+    event="category:object_action",
+    properties={"property_name": value},
+    is_internal=analytics.is_internal_request(request),
+)
+```
+
+**`get_distinct_id(request)`** — prefers `X-PostHog-Distinct-Id` header (frontend passes its PostHog ID to link events to the same person); falls back to a per-request UUID. Never uses client IP (shared NAT/VPN would merge unrelated users). Update this method when user auth is added.
+
+**`is_internal_request(request)`** — returns `True` if `X-Internal-Request: true` header is present. Update this method to change the internal traffic detection strategy.
+
+**Disabled mode** — set `POSTHOG_API_KEY=` (empty) to silently disable all event tracking. All `capture_*` calls become no-ops. Useful for local dev without a PostHog project.
+
+**Environment variables:** `POSTHOG_API_KEY`, `POSTHOG_HOST`, `APP_ENV`
+
+**Testing analytics:**
+- Unit tests for `AnalyticsClient`: `tests/analytics/test_analytics_client.py`
+- Route-level analytics tests: `tests/server/articles/test_router.py`
+- In tests, inject a `MagicMock(spec=AnalyticsClient)` via `app.dependency_overrides[get_analytics]` and assert on `capture_with_common_props` call args
+- The `override_get_analytics` function must have NO parameters (or typed `Request`); an untyped `request` param causes FastAPI to treat it as a query param (422)
+
 ### Agent Architecture
 
 The system uses a single specialized agent (`news_gatherer_agent`) that:
