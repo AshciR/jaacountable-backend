@@ -32,6 +32,8 @@ class CanonicalLogMiddleware(BaseHTTPMiddleware):
             "duration_ms": None,
             "client_ip": request.client.host if request.client else None,
             "user_agent": request.headers.get("user-agent", ""),
+            "posthog_distinct_id": request.headers.get("X-PostHog-Distinct-Id", ""),
+            "internal_request": request.headers.get("X-Internal-Request", ""),
             "query_params": str(request.url.query) if request.url.query else "",
             "error": None,
             "error_type": None,

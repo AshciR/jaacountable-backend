@@ -157,6 +157,59 @@ docker-compose down
 docker-compose down -v
 ```
 
+## Analytics (PostHog)
+
+The backend uses [PostHog](https://posthog.com) for server-side event tracking. Analytics is **disabled by default** — no events are sent until you configure an API key.
+
+### Setup
+
+Add the following to your `.env` file (copy from `.env.example`):
+
+```dotenv
+POSTHOG_API_KEY=phc_your_key_here      # From PostHog project settings
+POSTHOG_HOST=https://app.posthog.com   # Override for self-hosted PostHog
+APP_ENV=development                    # Options: development, staging, production
+```
+
+Leave `POSTHOG_API_KEY` empty (or omit it) to disable analytics silently.
+
+### Tracked Events
+
+| Event | Fired when | Properties |
+|---|---|---|
+| `search:query_submit` | `GET /api/v1/articles` is called | `search_query`, `results_count`, `environment`, `is_internal` |
+
+All events automatically include `environment` (from `APP_ENV`) and `is_internal` (see below).
+
+### Internal Traffic
+
+Set the `X-Internal-Request: true` header on requests from internal infrastructure (scripts, CI pipelines, internal tooling) to flag events as internal. This allows filtering out non-user traffic in PostHog dashboards.
+
+### Linking Frontend and Backend Events
+
+If the frontend uses PostHog, pass its distinct ID to the backend via the `X-PostHog-Distinct-Id` header. This links server-side events to the same PostHog person profile as the frontend events.
+
+```
+GET /api/v1/articles?q=corruption
+X-PostHog-Distinct-Id: <frontend posthog distinct_id>
+```
+
+### Adding New Events
+
+1. In the route handler, inject `analytics: Annotated[AnalyticsClient, Depends(get_analytics)]` and `request: Request`
+2. After the core logic completes, call:
+   ```python
+   analytics.capture_with_common_props(
+       distinct_id=analytics.get_distinct_id(request),
+       event="category:object_action",
+       properties={"property_name": value},
+       is_internal=analytics.is_internal_request(request),
+   )
+   ```
+3. Write tests using `app.dependency_overrides[get_analytics]` to inject a `MagicMock(spec=AnalyticsClient)`
+
+See `src/analytics/client.py` for the full client implementation and `CLAUDE.md` for naming conventions.
+
 ## Supabase Setup (Staging/Production)
 
 For deploying to staging or production environments, you can use Supabase's hosted PostgreSQL service instead of running your own database server.
