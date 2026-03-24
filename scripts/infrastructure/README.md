@@ -6,17 +6,23 @@ Scripts for managing the local development database and server.
 
 ## Everyday workflows
 
-### Fresh setup (first time or after a clean)
+### Docker Compose stack — cold start (first time or after wiping volumes)
+```bash
+./scripts/infrastructure/compose-cold-start.sh
+SEED_DB=true ./scripts/infrastructure/compose-cold-start.sh
+```
+
+### Standalone database — fresh setup (first time or after a clean)
 ```bash
 ./scripts/infrastructure/init-db.sh
 ```
 
-### Fresh setup with seed data
+### Standalone database — fresh setup with seed data
 ```bash
 SEED_DB=true ./scripts/infrastructure/init-db.sh
 ```
 
-### Wipe everything and start over
+### Standalone database — wipe everything and start over
 ```bash
 ./scripts/infrastructure/clean-db.sh && SEED_DB=true ./scripts/infrastructure/init-db.sh
 ```
@@ -24,6 +30,18 @@ SEED_DB=true ./scripts/infrastructure/init-db.sh
 ---
 
 ## Script reference
+
+### `compose-cold-start.sh`
+Cold starts the full docker-compose stack from scratch. Tears down existing containers and volumes, starts postgres, runs migrations via `migrate.sh`, optionally seeds via `seed_db.sh`, then starts the app container.
+
+Use this when the postgres volume doesn't exist yet (first run, or after `docker-compose down -v`). For normal restarts where the volume is intact, use `docker-compose up` directly.
+
+```bash
+./scripts/infrastructure/compose-cold-start.sh
+SEED_DB=true ./scripts/infrastructure/compose-cold-start.sh
+```
+
+---
 
 ### `init-db.sh`
 Starts the database container and runs all Alembic migrations. The go-to script for getting a working database.

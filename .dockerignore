@@ -1,0 +1,35 @@
+# Version control
+.git
+.gitignore
+
+# Python artifacts
+__pycache__
+*.py[oc]
+.pytest_cache
+
+# Virtual environments (builder stage creates its own)
+.venv
+
+# Environment variable files — injected at runtime, never baked into image
+.env
+*.env
+.env.*
+
+# IDE / OS
+.idea
+.DS_Store
+*.swp
+
+# Logs
+*.log
+
+# Tests run on host / in CI before image creation — not needed in the image
+tests/
+
+# Dev scripts — container is an API server only
+scripts/
+
+# Docker files themselves
+Dockerfile
+.dockerignore
+docker-compose.yml

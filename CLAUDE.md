@@ -266,6 +266,32 @@ uv run python scripts/parallel_archive_discovery.py \
 - Python 3.12+ required
 - Docker & Docker Compose for local PostgreSQL database
 
+## Docker Setup
+
+The project includes a production-ready Docker configuration.
+
+**Key files:**
+- `Dockerfile` — two-stage build: `builder` installs deps with uv into `.venv`; `runtime` copies the venv + source, runs as non-root user (UID 1001), starts `fastapi run` in production mode
+- `docker-compose.yml` — two services: `postgres` (with healthcheck) and `app` (depends on postgres healthy)
+- `.dockerignore` — excludes `.venv`, `.env*`, `tests/`, `scripts/`, `__pycache__`, etc.; `uv.lock` is intentionally included (needed by the builder stage)
+
+**Environment variables** are never baked into the image. Locally, docker-compose reads them from `.env` via variable substitution. `DATABASE_URL` is constructed in `docker-compose.yml` to point to the `postgres` service name — this overrides any `DATABASE_URL` in `.env` when running via Docker Compose.
+
+**Cold start workflow** (first run or after `docker-compose down -v`):
+```bash
+./scripts/infrastructure/compose-cold-start.sh
+SEED_DB=true ./scripts/infrastructure/compose-cold-start.sh  # with seed
+```
+
+The script calls `start-db.sh`, `migrate.sh`, optionally `seed_db.sh`, then `docker-compose up -d app`. Normal restarts use `docker-compose up` directly (no migration step needed).
+
+**Hot reload in development** — uncomment in `docker-compose.yml` under the `app` service:
+```yaml
+command: ["fastapi", "dev", "src/server/app.py", "--host", "0.0.0.0", "--port", "8000"]
+volumes:
+  - ./src:/app/src
+```
+
 ## Development Commands
 
 ### Running the Application
