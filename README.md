@@ -105,6 +105,59 @@ For production:
 uv run fastapi run src/server/app.py
 ```
 
+### Via Docker Compose (Full Stack)
+
+Run PostgreSQL and the FastAPI server together with Docker Compose.
+
+**Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine + Compose v2 on Linux)
+
+**First time / cold start** (builds image, runs migrations, starts the stack):
+
+```bash
+./scripts/infrastructure/compose-cold-start.sh
+
+# With seed data:
+SEED_DB=true ./scripts/infrastructure/compose-cold-start.sh
+```
+
+- **API**: `http://localhost:8000/`
+- **Interactive docs**: `http://localhost:8000/docs`
+
+**Normal restart** (volume intact, no migrations needed):
+
+```bash
+docker-compose up
+```
+
+**Hot reload for development** — edit `docker-compose.yml` and uncomment these lines under the `app` service:
+
+```yaml
+command: ["fastapi", "dev", "src/server/app.py", "--host", "0.0.0.0", "--port", "8000"]
+volumes:
+  - ./src:/app/src
+```
+
+**Common commands:**
+
+```bash
+# View live logs
+docker-compose logs -f app
+
+# Open a shell inside the running container
+docker-compose exec app bash
+
+# Stop all services
+docker-compose down
+
+# Stop and delete the database volume (DESTRUCTIVE)
+docker-compose down -v
+
+# Rebuild after dependency changes (pyproject.toml / uv.lock)
+docker-compose build --no-cache app
+```
+
+**Environment variables:** `DATABASE_URL` is constructed automatically in `docker-compose.yml` to point to the `postgres` service — do not set it manually in `.env` when running via Docker Compose. All other variables (`OPENAI_API_KEY`, `SENTRY_DSN`, etc.) are read from `.env`.
+
 ## Database Management
 
 The project uses PostgreSQL for data persistence and Alembic for database migrations.
