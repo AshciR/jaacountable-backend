@@ -11,6 +11,7 @@ from config.log_config import configure_logging, logger
 from src.analytics.client import analytics_client
 from src.server.articles.router import router as articles_router
 from src.server.entities.router import router as entities_router
+from src.server.health.router import router as health_router
 from src.server.middleware import CanonicalLogMiddleware
 
 API_V1_PREFIX = "/api/v1"
@@ -60,5 +61,6 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(CanonicalLogMiddleware)
 
 # Routers
+app.include_router(health_router)
 app.include_router(articles_router, prefix=API_V1_PREFIX)
 app.include_router(entities_router, prefix=API_V1_PREFIX)
