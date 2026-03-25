@@ -35,4 +35,4 @@ fi
 
 echo ""
 echo "Starting app..."
-docker-compose up -d app
+docker-compose up -d --build app
