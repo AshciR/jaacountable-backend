@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 import sentry_sdk
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sentry_sdk.integrations.logging import LoggingIntegration
 
 from config.database import db_config
@@ -59,6 +60,21 @@ app = FastAPI(lifespan=lifespan)
 
 # Middlewares
 app.add_middleware(CanonicalLogMiddleware)
+
+#  Note on middleware ordering: FastAPI middlewares execute in reverse registration order (last registered = outermost).
+#  CORS must run before CanonicalLogMiddleware so preflight OPTIONS requests are handled
+#  and returned before hitting the canonical log layer.
+#  Registering CORS after CanonicalLogMiddleware achieves this.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://jaccountable.org",
+        "https://staging.jaccountable.org",
+        "http://localhost:3000",
+    ],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
 # Routers
 app.include_router(health_router)
