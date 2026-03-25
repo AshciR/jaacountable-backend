@@ -9,14 +9,15 @@ from src.server.entities.schemas import (
     EntityListResponse,
     EntitySummarySchema,
 )
+from src.cache.cache_interface import CacheBackend
 from src.server.entities.service import EntityListService
-from src.server.dependencies import get_db
+from src.server.dependencies import get_cache, get_db
 
 router = APIRouter(prefix="/entities", tags=["entities"])
 
 
-def _get_service() -> EntityListService:
-    return EntityListService()
+def _get_service(cache: Annotated[CacheBackend, Depends(get_cache)]) -> EntityListService:
+    return EntityListService(cache=cache)
 
 
 @router.get("", response_model=EntityListResponse)

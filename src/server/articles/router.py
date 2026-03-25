@@ -10,14 +10,15 @@ from src.server.articles.schemas import (
     ArticleSearchResponse,
     ArticleSearchResultSchema,
 )
+from src.cache.cache_interface import CacheBackend
 from src.server.articles.service import ArticleSearchService
-from src.server.dependencies import get_analytics, get_db
+from src.server.dependencies import get_analytics, get_cache, get_db
 
 router = APIRouter(prefix="/articles", tags=["articles"])
 
 
-def _get_service() -> ArticleSearchService:
-    return ArticleSearchService()
+def _get_service(cache: Annotated[CacheBackend, Depends(get_cache)]) -> ArticleSearchService:
+    return ArticleSearchService(cache=cache)
 
 
 @router.get("", response_model=ArticleSearchResponse)
