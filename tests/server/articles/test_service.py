@@ -3,10 +3,12 @@
 import asyncpg
 import pytest
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
 
 from src.article_persistence.models.domain import Article, Classification
 from src.article_persistence.repositories.article_repository import ArticleRepository
 from src.article_persistence.repositories.classification_repository import ClassificationRepository
+from src.cache.in_memory import InMemoryCache
 from src.server.articles.schemas import ArticleSearchParams
 from src.server.articles.service import ArticleSearchService
 from tests.article_persistence.utils import (
@@ -936,3 +938,93 @@ class TestSearchArticlesEdgeCases:
         assert new_idx is not None
         assert old_idx is not None
         assert new_idx < old_idx
+
+
+# ---------------------------------------------------------------------------
+# Cache behaviour tests
+# ---------------------------------------------------------------------------
+
+
+class TestArticleSearchServiceCaching:
+    """Cache integration: miss, hit, and bypass for search queries."""
+
+    async def test_browse_populates_cache_on_first_call(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article and a fresh cache
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/cache-browse",
+            title="Cache test article",
+            full_text="Content for cache population test.",
+        )
+        cache = InMemoryCache()
+        service = ArticleSearchService(cache=cache)
+
+        # When: we call search in browse mode (no q)
+        await service.search(db_connection, ArticleSearchParams())
+
+        # Then: the cache has exactly one entry
+        assert cache.size() == 1
+
+    async def test_different_browse_params_produce_separate_cache_entries(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article and a service with a cache
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/cache-browse-params",
+            title="Cache params article",
+            full_text="Content for cache key differentiation test.",
+        )
+        cache = InMemoryCache()
+        service = ArticleSearchService(cache=cache)
+
+        # When: we browse with two different page sizes
+        await service.search(db_connection, ArticleSearchParams(page_size=10))
+        await service.search(db_connection, ArticleSearchParams(page_size=20))
+
+        # Then: each distinct param combination produces its own cache entry
+        assert cache.size() == 2
+
+    async def test_search_with_q_populates_cache(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article and a fresh cache
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/cache-search-q",
+            title="Cache population for corruption search",
+            full_text="This article discusses corruption in public office.",
+        )
+        cache = InMemoryCache()
+        service = ArticleSearchService(cache=cache)
+
+        # When: we call search with a free-text query (entity-driven homepage search)
+        await service.search(db_connection, ArticleSearchParams(q="corruption"))
+
+        # Then: the result is cached (entity searches are highly repeatable)
+        assert cache.size() == 1
+
+    async def test_service_without_cache_still_returns_results(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article and a service with no cache (cache=None)
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/cache-none",
+            title="No cache service test",
+            full_text="Content for no-cache service test.",
+        )
+        service = ArticleSearchService(cache=None)
+
+        # When: we browse
+        results, total = await service.search(db_connection, ArticleSearchParams())
+
+        # Then: results are returned normally
+        assert total >= 1
+        assert any(r.url == "https://example.com/cache-none" for r in results)

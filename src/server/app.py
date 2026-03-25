@@ -10,6 +10,7 @@ from sentry_sdk.integrations.logging import LoggingIntegration
 from config.database import db_config
 from config.log_config import configure_logging, logger
 from src.analytics.client import analytics_client
+from src.cache.in_memory import InMemoryCache
 from src.server.articles.router import router as articles_router
 from src.server.entities.router import router as entities_router
 from src.server.health.router import router as health_router
@@ -23,6 +24,9 @@ async def lifespan(app: FastAPI):
     await db_config.create_pool()
     app.state.db_config = db_config
     app.state.analytics_client = analytics_client
+    app.state.cache = InMemoryCache(
+        ttl_seconds=int(os.getenv("CACHE_TTL_SECONDS", "300"))
+    )
     yield
     await db_config.close_pool()
     analytics_client.shutdown()

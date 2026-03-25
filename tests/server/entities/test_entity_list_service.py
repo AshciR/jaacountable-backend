@@ -3,6 +3,7 @@
 import asyncpg
 from datetime import date, datetime, timezone
 
+from src.cache.in_memory import InMemoryCache
 from src.server.entities.schemas import EntityListParams
 from src.server.entities.service import EntityListService
 from tests.article_persistence.utils import (
@@ -355,3 +356,73 @@ class TestListEntitiesPagination:
         # Then: 2 results returned but total >= 6
         assert len(results) == 2
         assert total >= 6
+
+
+# ---------------------------------------------------------------------------
+# Cache behaviour tests
+# ---------------------------------------------------------------------------
+
+
+class TestEntityListServiceCaching:
+    """Cache integration: miss, hit, and bypass for entity list queries."""
+
+    async def test_list_entities_populates_cache_on_first_call(
+        self, db_connection: asyncpg.Connection
+    ):
+        # Given: an entity linked to an article
+        entity = await create_test_entity(
+            db_connection, name="Cache Entity", normalized_name="cache entity caching"
+        )
+        article = await insert_article_with_date(
+            db_connection, url="https://example.com/cache-entity-1"
+        )
+        await create_test_article_entity(db_connection, article.id, entity.id)
+        cache = InMemoryCache()
+        service = EntityListService(cache=cache)
+
+        # When: we list entities
+        await service.list_entities(db_connection, EntityListParams())
+
+        # Then: the cache has exactly one entry
+        assert cache.size() == 1
+
+    async def test_different_params_produce_separate_cache_entries(
+        self, db_connection: asyncpg.Connection
+    ):
+        # Given: an entity linked to an article
+        entity = await create_test_entity(
+            db_connection, name="Cache Entity Params", normalized_name="cache entity params caching"
+        )
+        article = await insert_article_with_date(
+            db_connection, url="https://example.com/cache-entity-params"
+        )
+        await create_test_article_entity(db_connection, article.id, entity.id)
+        cache = InMemoryCache()
+        service = EntityListService(cache=cache)
+
+        # When: we list with two different page sizes
+        await service.list_entities(db_connection, EntityListParams(page_size=10))
+        await service.list_entities(db_connection, EntityListParams(page_size=20))
+
+        # Then: each produces its own cache entry
+        assert cache.size() == 2
+
+    async def test_service_without_cache_still_returns_results(
+        self, db_connection: asyncpg.Connection
+    ):
+        # Given: an entity linked to an article and a service with no cache
+        entity = await create_test_entity(
+            db_connection, name="No Cache Entity", normalized_name="no cache entity caching"
+        )
+        article = await insert_article_with_date(
+            db_connection, url="https://example.com/no-cache-entity"
+        )
+        await create_test_article_entity(db_connection, article.id, entity.id)
+        service = EntityListService(cache=None)
+
+        # When: we list entities
+        results, total = await service.list_entities(db_connection, EntityListParams())
+
+        # Then: results are returned normally
+        assert total >= 1
+        assert any(r.normalized_name == "no cache entity caching" for r in results)
