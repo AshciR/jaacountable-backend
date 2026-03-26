@@ -126,6 +126,14 @@ def configure_logging(
         uv_logger.handlers = [InterceptHandler()]
         uv_logger.propagate = False
 
+    # Suppress access log noise from infrastructure health-check polling
+    class HealthCheckFilter(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            return "/health" not in record.getMessage()
+
+    # Add filters
+    logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
+
     # Suppress overly verbose third-party loggers
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)  # httpx uses httpcore internally
