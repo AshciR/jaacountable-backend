@@ -7,6 +7,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+# Paths that should not emit a canonical log line (e.g. health-check polling)
+SKIP_LOG_PATHS = frozenset({"/health"})
+
 
 class CanonicalLogMiddleware(BaseHTTPMiddleware):
     """Emit one structured log line per HTTP request.
@@ -21,6 +24,12 @@ class CanonicalLogMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
+
+        # health-check polling generates GET /health log lines every few seconds via CanonicalLogMiddleware.
+        # These are noise — the endpoint is infrastructure overhead, not meaningful application traffic.
+        if request.url.path in SKIP_LOG_PATHS:
+            return await call_next(request)
+
         request_id = str(uuid4())
         start = time.perf_counter()
 
