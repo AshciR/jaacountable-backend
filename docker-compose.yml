@@ -6,6 +6,7 @@ services:
     container_name: jaacountable-app
     environment:
       APP_ENV: ${APP_ENV:-development}
+      PORT: ${PORT:-8000}
       # DATABASE_URL points to the postgres service name (not localhost).
       # This overrides any DATABASE_URL in .env — intentional for Docker networking.
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-jaacountable_db}
@@ -17,19 +18,19 @@ services:
       POSTHOG_API_KEY: ${POSTHOG_API_KEY:-}
       POSTHOG_HOST: ${POSTHOG_HOST:-https://app.posthog.com}
     ports:
-      - "${APP_PORT:-8000}:8000"
+      - "${PORT:-8000}:${PORT:-8000}"
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:${PORT:-8000}/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
     restart: unless-stopped
     # Uncomment for hot reload during development:
-    # command: ["fastapi", "dev", "src/server/app.py", "--host", "0.0.0.0", "--port", "8000"]
+    # command: ["sh", "-c", "fastapi dev src/server/app.py --host 0.0.0.0 --port ${PORT:-8000}"]
     # volumes:
     #   - ./src:/app/src
 

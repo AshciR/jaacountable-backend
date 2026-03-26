@@ -3,7 +3,9 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from typing import Optional
+from urllib.parse import urlparse, urlunparse
 import asyncpg
+from loguru import logger
 
 
 class DatabaseConfig:
@@ -47,6 +49,28 @@ class DatabaseConfig:
             yield conn
         finally:
             await self.release_connection(conn)
+
+    @staticmethod
+    def mask_url(url: str) -> str:
+        """Return a database URL with credentials partially masked for logging.
+
+        Replaces username and password with ****{last4chars} to confirm
+        which credential set is in use without exposing secrets.
+        """
+        parsed = urlparse(url)
+        username = parsed.username or ""
+        password = parsed.password or ""
+        masked_user = f"****{username[-4:]}" if username else ""
+        masked_pass = f"****{password[-4:]}" if password else ""
+        if masked_user or masked_pass:
+            userinfo = f"{masked_user}:{masked_pass}" if masked_pass else masked_user
+            host = parsed.hostname or ""
+            if parsed.port:
+                host = f"{host}:{parsed.port}"
+            netloc = f"{userinfo}@{host}"
+        else:
+            netloc = parsed.netloc
+        return urlunparse(parsed._replace(netloc=netloc))
 
     def get_asyncpg_url(self) -> str:
         """
