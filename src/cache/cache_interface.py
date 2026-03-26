@@ -23,3 +23,7 @@ class CacheBackend(Protocol):
     async def delete(self, key: str) -> None:
         """Remove a key from the cache."""
         ...
+
+    def size(self) -> int:
+        """Current number of cached entries."""
+        ...

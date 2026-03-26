@@ -225,8 +225,9 @@ class TestEntityNormalizerServiceWithCache:
     async def test_all_entities_cached_no_llm_call(self, mock_session_service: AsyncMock):
         # Given: Pre-populated cache
         from src.article_classification.services.in_memory_entity_cache import InMemoryEntityCache
+        from src.cache.in_memory import InMemoryCache
 
-        cache = InMemoryEntityCache()
+        cache = InMemoryEntityCache(cache=InMemoryCache())
         await cache.set("Hon. Ruel Reid", NormalizedEntity(
             original_value="Hon. Ruel Reid", normalized_value="ruel_reid",
             confidence=0.95, reason="Cached"
@@ -246,8 +247,9 @@ class TestEntityNormalizerServiceWithCache:
     async def test_cache_populated_after_llm(self, mock_runner_single_entity: AsyncMock, mock_session_service: AsyncMock):
         # Given: Empty cache
         from src.article_classification.services.in_memory_entity_cache import InMemoryEntityCache
+        from src.cache.in_memory import InMemoryCache
 
-        cache = InMemoryEntityCache()
+        cache = InMemoryEntityCache(cache=InMemoryCache())
         normalizer = EntityNormalizerService(runner=mock_runner_single_entity, session_service=mock_session_service, cache=cache)
 
         # When: Normalizing uncached entity
@@ -278,8 +280,9 @@ class TestEntityNormalizerServiceWithCache:
     async def test_partial_cache_hit_calls_llm_for_misses_only(self, mock_runner_single_entity: AsyncMock, mock_session_service: AsyncMock):
         # Given: Cache with one entity
         from src.article_classification.services.in_memory_entity_cache import InMemoryEntityCache
+        from src.cache.in_memory import InMemoryCache
 
-        cache = InMemoryEntityCache()
+        cache = InMemoryEntityCache(cache=InMemoryCache())
         await cache.set("Cached Entity", NormalizedEntity(
             original_value="Cached Entity", normalized_value="cached_entity",
             confidence=0.95, reason="Test"
@@ -299,8 +302,9 @@ class TestEntityNormalizerServiceWithCache:
     async def test_cache_key_normalization_improves_hit_rate(self, mock_session_service: AsyncMock):
         # Given: Cache with entity stored in lowercase
         from src.article_classification.services.in_memory_entity_cache import InMemoryEntityCache
+        from src.cache.in_memory import InMemoryCache
 
-        cache = InMemoryEntityCache()
+        cache = InMemoryEntityCache(cache=InMemoryCache())
         await cache.set("ocg", NormalizedEntity(
             original_value="ocg", normalized_value="office_of_the_contractor_general",
             confidence=0.95, reason="Test"

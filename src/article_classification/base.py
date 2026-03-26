@@ -161,6 +161,6 @@ class EntityCache(Protocol):
         Get cache statistics.
 
         Returns:
-            Dict with keys: hits, misses, size, hit_rate, evictions, expirations
+            Dict with keys: hits, misses, size, max_size, hit_rate, ttl_seconds
         """
         ...
