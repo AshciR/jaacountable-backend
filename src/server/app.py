@@ -74,7 +74,8 @@ app.add_middleware(
     allow_origins=[
         "https://jaccountable.org",
         "https://staging.jaccountable.org",
-        "http://localhost:3000",
+        "http://localhost:3000",  # node dev server
+        "http://localhost:4173",  # vite preview
     ],
     allow_methods=["GET"],
     allow_headers=["*"],
