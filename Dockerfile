@@ -54,4 +54,4 @@ USER appuser
 # Production entrypoint: fastapi run (uvicorn, no reload)
 # Env vars (DATABASE_URL, OPENAI_API_KEY, etc.) are injected at runtime by
 # Docker Compose locally, or by Render's Environment Variables in production.
-CMD ["fastapi", "run", "src/server/app.py", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "exec fastapi run src/server/app.py --host 0.0.0.0 --port ${PORT:-8000}"]
