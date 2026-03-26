@@ -60,8 +60,8 @@ class DatabaseConfig:
 
     async def create_pool(
         self,
-        min_size: int = 10,
-        max_size: int = 20,
+        min_size: int = int(os.getenv("DB_POOL_MIN_SIZE", "1")),
+        max_size: int = int(os.getenv("DB_POOL_MAX_SIZE", "5")),
         command_timeout: float = 60.0,
     ) -> asyncpg.Pool:
         """
