@@ -194,8 +194,7 @@ class EntityNormalizerService:
             logger.info(
                 f"Cache stats: hit_rate={stats['hit_rate']:.1%}, "
                 f"size={stats['size']:,}/{stats['max_size']:,}, "
-                f"hits={stats['hits']}, misses={stats['misses']}, "
-                f"evictions={stats['evictions']}, expirations={stats['expirations']}"
+                f"hits={stats['hits']}, misses={stats['misses']}"
             )
         except Exception as e:
             logger.debug(f"Failed to log cache stats: {e}")
