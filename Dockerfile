@@ -33,6 +33,9 @@ RUN groupadd --gid 1001 appgroup && \
 
 WORKDIR /app
 
+LABEL org.opencontainers.image.source="https://github.com/AshciR/jaacountable-backend"
+LABEL org.opencontainers.image.description="Jaccountable, news aggregator for government accountability tracking"
+
 # Copy pre-built venv from builder stage
 COPY --from=builder --chown=appuser:appgroup /app/.venv /app/.venv
 
