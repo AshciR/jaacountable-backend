@@ -107,6 +107,12 @@ class DatabaseConfig:
                     max_size=max_size,
                     command_timeout=command_timeout,
                 )
+            logger.info(
+                "Database pool created: url={}, min_size={}, max_size={}",
+                self.mask_url(self.get_asyncpg_url()),
+                min_size,
+                max_size,
+            )
             return self._pool
 
     async def close_pool(self) -> None:
