@@ -27,7 +27,8 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "rich>=14.2.0",
     "sentry-sdk>=2.56.0",
-    "testcontainers[postgres]>=4.13.3",
+    "redis[hiredis]>=5.0.0",
+    "testcontainers[postgres,redis]>=4.13.3",
 ]
 
 [tool.pytest.ini_options]

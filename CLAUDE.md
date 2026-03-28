@@ -457,6 +457,9 @@ GitHub Actions CI runs **all tests** (including integration tests) using the `CL
 - `run_migrations` - Runs Alembic migrations on test database
 - `db_pool` - asyncpg connection pool
 - `db_connection` - Connection with automatic transaction rollback
+- `redis_container` - Session-scoped Redis container (`redis:8-alpine`)
+- `redis_client` - Function-scoped async Redis client; calls `FLUSHDB` after each test for isolation
+- `redis_cache` - `RedisCacheBackend` wired to the test Redis container
 
 Note: Tests within a single file run sequentially due to session-scoped async database fixtures and event loop constraints with pytest-asyncio.
 

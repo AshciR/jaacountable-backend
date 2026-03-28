@@ -32,9 +32,6 @@ class InMemoryCache:
         self._max_size = max_size
         self._ttl_seconds = ttl_seconds
         self._lock = asyncio.Lock()
-        logger.info(
-            f"Initialized InMemoryCache (max_size={max_size:,}, ttl={ttl_seconds}s)"
-        )
 
     async def get(self, key: str) -> str | None:
         """Return cached value, or None if missing or expired."""

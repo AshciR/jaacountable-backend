@@ -13,11 +13,14 @@ from pathlib import Path
 import asyncpg
 import pytest
 import pytest_asyncio
+import redis.asyncio as aioredis
 from alembic import command
 from alembic.config import Config
 from testcontainers.postgres import PostgresContainer
+from testcontainers.redis import RedisContainer
 
 from config.database import DatabaseConfig
+from src.cache.redis_cache import RedisCacheBackend
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +127,51 @@ async def db_pool(
         yield pool
     finally:
         await db_config.close_pool()
+
+
+@pytest.fixture(scope="session")
+def redis_container() -> Generator[RedisContainer, None, None]:
+    """
+    Start a Redis container for the test session.
+
+    Session-scoped so the container starts once and is shared across all tests.
+    """
+    with RedisContainer("redis:8-alpine") as container:
+        host = container.get_container_host_ip()
+        port = container.get_exposed_port(6379)
+        logger.info("=" * 60)
+        logger.info("Test Redis Container Started")
+        logger.info("=" * 60)
+        logger.info(f"  Host: {host}")
+        logger.info(f"  Port: {port}")
+        logger.info("=" * 60)
+        yield container
+
+
+@pytest_asyncio.fixture
+async def redis_client(
+    redis_container: RedisContainer,
+) -> AsyncGenerator[aioredis.Redis, None]:
+    """
+    Provide an async Redis client with automatic cleanup after each test.
+
+    Calls FLUSHDB in teardown to mirror the transaction-rollback isolation
+    pattern used by db_connection.
+    """
+    host = redis_container.get_container_host_ip()
+    port = redis_container.get_exposed_port(6379)
+    client = aioredis.from_url(f"redis://{host}:{port}")
+    try:
+        yield client
+    finally:
+        await client.flushdb()
+        await client.aclose()
+
+
+@pytest_asyncio.fixture
+async def redis_cache(redis_client: aioredis.Redis) -> RedisCacheBackend:
+    """Provide a RedisCacheBackend wired to the test Redis container."""
+    return RedisCacheBackend(client=redis_client)
 
 
 @pytest_asyncio.fixture

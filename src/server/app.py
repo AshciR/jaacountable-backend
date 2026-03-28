@@ -9,8 +9,11 @@ from sentry_sdk.integrations.logging import LoggingIntegration
 
 from config.database import db_config
 from config.log_config import configure_logging, logger
+import redis.asyncio as aioredis
+
 from src.analytics.client import analytics_client
 from src.cache.in_memory import InMemoryCache
+from src.cache.redis_cache import RedisCacheBackend
 from src.server.articles.router import router as articles_router
 from src.server.entities.router import router as entities_router
 from src.server.health.router import router as health_router
@@ -19,18 +22,35 @@ from src.server.middleware import CanonicalLogMiddleware
 API_V1_PREFIX = "/api/v1"
 
 
+
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db_config.create_pool()
     app.state.db_config = db_config
     app.state.analytics_client = analytics_client
-    app.state.cache = InMemoryCache(
-        ttl_seconds=int(os.getenv("CACHE_TTL_SECONDS", "300"))
-    )
+    app.state.cache, _redis_client = await _init_cache()
     yield
     await db_config.close_pool()
     analytics_client.shutdown()
+    if _redis_client:
+        await _redis_client.aclose()
 
+async def _init_cache() -> tuple[InMemoryCache | RedisCacheBackend, aioredis.Redis | None]:
+    """Initialise cache backend from environment.
+
+    Returns (cache_backend, redis_client_or_None).  The caller is responsible
+    for closing the Redis client on shutdown when it is not None.
+    """
+    redis_url = os.getenv("REDIS_URL")
+    ttl = int(os.getenv("CACHE_TTL_SECONDS", "300"))
+    if redis_url:
+        client = aioredis.from_url(redis_url)
+        logger.info("Cache backend: Redis (url={} ttl={}s)", redis_url, ttl)
+        return RedisCacheBackend(client=client, ttl_seconds=ttl), client
+    logger.info("Cache backend: InMemoryCache (max_size=1,000 ttl={}s)", ttl)
+    return InMemoryCache(ttl_seconds=ttl), None
 
 def _init_sentry() -> None:
     """
@@ -56,6 +76,7 @@ def _init_sentry() -> None:
     )
     logger.info("Telemetry initialized")
 
+# Begin App Startup
 
 configure_logging()
 _init_sentry()
