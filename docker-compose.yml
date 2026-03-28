@@ -17,10 +17,15 @@ services:
       SENTRY_DSN: ${SENTRY_DSN:-}
       POSTHOG_API_KEY: ${POSTHOG_API_KEY:-}
       POSTHOG_HOST: ${POSTHOG_HOST:-https://app.posthog.com}
+      # REDIS_URL points to the redis service name (not localhost).
+      # This overrides any REDIS_URL in .env — intentional for Docker networking.
+      REDIS_URL: redis://redis:6379
     ports:
       - "${PORT:-8000}:${PORT:-8000}"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:${PORT:-8000}/health || exit 1"]
@@ -33,6 +38,18 @@ services:
     # command: ["sh", "-c", "fastapi dev src/server/app.py --host 0.0.0.0 --port ${PORT:-8000}"]
     # volumes:
     #   - ./src:/app/src
+
+  redis:
+    image: redis:8-alpine
+    container_name: redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   postgres:
     image: postgres:17-alpine

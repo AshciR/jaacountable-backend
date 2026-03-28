@@ -32,7 +32,7 @@ SEED_DB=true ./scripts/infrastructure/init-db.sh
 ## Script reference
 
 ### `compose-cold-start.sh`
-Cold starts the full docker-compose stack from scratch. Tears down existing containers and volumes, starts postgres, runs migrations via `migrate.sh`, optionally seeds via `seed_db.sh`, then starts the app container.
+Cold starts the full docker-compose stack from scratch. Tears down existing containers and volumes, starts postgres, runs migrations via `migrate.sh`, optionally seeds via `seed_db.sh`, then starts the app and Redis containers.
 
 Use this when the postgres volume doesn't exist yet (first run, or after `docker-compose down -v`). For normal restarts where the volume is intact, use `docker-compose up` directly.
 
