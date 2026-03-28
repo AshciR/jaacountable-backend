@@ -34,5 +34,5 @@ if [ "${SEED_DB}" = "true" ]; then
 fi
 
 echo ""
-echo "Starting app..."
+echo "Starting Redis and app..."
 docker-compose up -d --build app
