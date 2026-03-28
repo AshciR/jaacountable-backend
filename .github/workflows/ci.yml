@@ -26,6 +26,11 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Pre-pull testcontainer images
+        run: |
+          docker pull postgres:17-alpine
+          docker pull redis:8-alpine
+
       - name: Run unit tests
         run: uv run pytest tests/ -v --log-cli-level=INFO -n auto --dist loadfile -m "not external" --force-sugar
 
@@ -47,6 +52,11 @@ jobs:
 
       - name: Install dependencies
         run: uv sync
+
+      - name: Pre-pull testcontainer images
+        run: |
+          docker pull postgres:17-alpine
+          docker pull redis:8-alpine
 
       - name: Run integration tests
         run: uv run pytest tests/ -v --log-cli-level=INFO -n auto --dist loadfile -m integration --force-sugar
