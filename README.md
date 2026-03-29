@@ -265,28 +265,28 @@ See `src/analytics/client.py` for the full client implementation and `CLAUDE.md`
 
 ## Cache
 
-The backend caches API responses to reduce database load. By default it uses an **in-memory LRU cache** (single-process, no setup required). For multi-worker or multi-instance deployments, swap in the **Redis backend** by setting `REDIS_URL`.
+The backend caches API responses to reduce database load. By default it uses an **in-memory LRU cache** (single-process, no setup required). For multi-worker or multi-instance deployments, swap in the **Redis backend** by setting `CACHE_URL`.
 
 ### Environment variables
 
 | Variable | Default | Description |
 |---|---|---|
 | `CACHE_TTL_SECONDS` | `300` | Entry lifetime in seconds (in-memory backend) |
-| `REDIS_URL` | *(unset)* | When set, switches to `RedisCacheBackend`. Leave empty to use in-memory. |
+| `CACHE_URL` | *(unset)* | When set, switches to `RedisCacheBackend`. Leave empty to use in-memory. |
 
 ```dotenv
 # In-memory (default, no Redis needed)
 CACHE_TTL_SECONDS=300
-REDIS_URL=
+CACHE_URL=
 
 # Redis — local Docker
-REDIS_URL=redis://localhost:6379
+CACHE_URL=redis://localhost:6379
 
 # Redis — Render internal URL (same-region, no TLS)
-REDIS_URL=redis://red-xxxx:6379
+CACHE_URL=redis://red-xxxx:6379
 
 # Redis — Render external URL (TLS required)
-REDIS_URL=rediss://:password@red-xxxx.render.com:6380
+CACHE_URL=rediss://:password@red-xxxx.render.com:6380
 ```
 
 ### Key files
@@ -294,7 +294,7 @@ REDIS_URL=rediss://:password@red-xxxx.render.com:6380
 - `src/cache/cache_interface.py` — `CacheBackend` Protocol
 - `src/cache/in_memory.py` — `InMemoryCache` (TTL + LRU, single-process)
 - `src/cache/redis_cache.py` — `RedisCacheBackend` (Redis / Valkey compatible)
-- `src/server/app.py` — `_init_cache()` selects backend from `REDIS_URL` env var
+- `src/server/app.py` — `_init_cache()` selects backend from `CACHE_URL` env var
 - `src/server/dependencies.py` — `get_cache()` FastAPI dependency
 
 ### Render key-value (Valkey)

@@ -43,11 +43,11 @@ async def _init_cache() -> tuple[InMemoryCache | RedisCacheBackend, aioredis.Red
     Returns (cache_backend, redis_client_or_None).  The caller is responsible
     for closing the Redis client on shutdown when it is not None.
     """
-    redis_url = os.getenv("REDIS_URL")
+    cache_url = os.getenv("CACHE_URL")
     ttl = int(os.getenv("CACHE_TTL_SECONDS", "300"))
-    if redis_url:
-        client = aioredis.from_url(redis_url)
-        logger.info("Cache backend: Redis (url={} ttl={}s)", redis_url, ttl)
+    if cache_url:
+        client = aioredis.from_url(cache_url)
+        logger.info("Cache backend: Redis (url={} ttl={}s)", cache_url, ttl)
         return RedisCacheBackend(client=client, ttl_seconds=ttl), client
     logger.info("Cache backend: InMemoryCache (max_size=1,000 ttl={}s)", ttl)
     return InMemoryCache(ttl_seconds=ttl), None
