@@ -1,0 +1,16 @@
+# Compose override for multi-instance scaling.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.scale.yml up --scale app=2
+#   docker compose -f docker-compose.yml -f docker-compose.scale.yml port app 8000
+#
+# This override removes the two settings that block scaling:
+#   - container_name (fixed name → only one replica allowed)
+#   - host port binding (fixed port → port conflicts on replica 2+)
+#
+# Docker assigns unique container names and ephemeral host ports per replica.
+services:
+  app:
+    container_name: !reset null
+    ports: !override
+      - "8001-8010:${PORT:-8000}"
