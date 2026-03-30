@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -7,6 +7,11 @@ on:
     branches: [main]
 
 jobs:
+  # ---
+  # CI — Continuous Integration
+  # Run tests on every push and pull request to main.
+  # ---
+
   unit-tests:
     runs-on: ubuntu-latest
     steps:
@@ -64,6 +69,12 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_CI }}
           OPENAI_EXTRACTOR_API_KEY: ${{ secrets.OPENAI_CI }}
 
+  # ---
+  # CD — Continuous Deployment
+  # Build and push the Docker image, then trigger a deploy on Render.
+  # Only runs on pushes to main (not pull requests).
+  # ---
+
   docker-publish:
     needs: [unit-tests, integration-tests]
     if: github.ref == 'refs/heads/main'
@@ -98,3 +109,13 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  deploy:
+    needs: [docker-publish]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy
+        env:
+          deploy_url: ${{ secrets.RENDER_STAGING_DEPLOY_HOOK_URL }}
+        run: curl "$deploy_url"
