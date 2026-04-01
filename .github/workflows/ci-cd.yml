@@ -3,8 +3,12 @@ name: CI/CD
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'scripts/**'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'scripts/**'
 
 jobs:
   # ---

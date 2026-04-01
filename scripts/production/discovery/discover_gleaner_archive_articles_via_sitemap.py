@@ -26,7 +26,6 @@ Output:
 
 import argparse
 import asyncio
-import json
 import sys
 import time
 from datetime import datetime, timezone
@@ -35,71 +34,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 from loguru import logger
 
-# Add project root to path
-project_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(project_root))
-
 from config.log_config import configure_logging
+from scripts.production.discovery.utils import build_failure_stubs, write_jsonl
 from src.article_discovery.discoverers.jamaica_gleaner_sitemap_discoverer import (
     JamaicaGleanerSitemapDiscoverer,
 )
-from src.article_discovery.models import DiscoveredArticle
-
-
-def write_jsonl(articles: list[DiscoveredArticle], output_path: Path) -> None:
-    """
-    Write discovered articles to a JSONL file.
-
-    Each line is a JSON object representing a DiscoveredArticle.
-    Uses Pydantic's model_dump(mode='json') to serialize datetimes to ISO 8601.
-
-    Args:
-        articles: List of articles to write.
-        output_path: Path to output JSONL file.
-    """
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with open(output_path, "w", encoding="utf-8") as f:
-        for article in articles:
-            article_dict = article.model_dump(mode="json")
-            f.write(json.dumps(article_dict, ensure_ascii=False) + "\n")
-
-    logger.info(f"Wrote {len(articles)} articles to {output_path}")
-
-
-def build_failure_stubs(
-    failed_sitemaps: list[str], news_source_id: int
-) -> list[DiscoveredArticle]:
-    """
-    Create stub DiscoveredArticle entries for failed sitemap pages.
-
-    These are NOT real articles — they are placeholder entries that identify
-    which sitemap pages failed so they can be retried.
-
-    Title format is "FAILED: {page_name}" to match the pattern used
-    by other discovery scripts.
-
-    Args:
-        failed_sitemaps: List of page identifiers that failed (e.g., "page=1").
-        news_source_id: Database ID of the news source.
-
-    Returns:
-        List of stub DiscoveredArticle instances.
-    """
-    now = datetime.now(timezone.utc)
-    stubs = []
-    for page_name in failed_sitemaps:
-        stubs.append(
-            DiscoveredArticle(
-                url=f"https://jamaica-gleaner.com/sitemap.xml?{page_name}",
-                news_source_id=news_source_id,
-                section="sitemap",
-                discovered_at=now,
-                title=f"FAILED: {page_name}",
-                published_date=None,
-            )
-        )
-    return stubs
 
 
 async def main() -> int:
@@ -204,7 +143,10 @@ async def main() -> int:
 
         articles = await discoverer.discover(news_source_id=args.news_source_id)
         failure_stubs = build_failure_stubs(
-            discoverer.failed_sitemaps, args.news_source_id
+            discoverer.failed_sitemaps,
+            args.news_source_id,
+            url_builder=lambda p: f"https://jamaica-gleaner.com/sitemap.xml?{p}",
+            section="sitemap",
         )
 
         elapsed = time.time() - start_time

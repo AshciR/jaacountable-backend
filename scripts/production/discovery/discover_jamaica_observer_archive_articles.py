@@ -27,7 +27,6 @@ Output:
 
 import argparse
 import asyncio
-import json
 import sys
 import time
 from datetime import datetime, timezone
@@ -36,78 +35,18 @@ from pathlib import Path
 from dotenv import load_dotenv
 from loguru import logger
 
-# Add project root to path
-project_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(project_root))
-
 from config.log_config import configure_logging
+from scripts.production.discovery.utils import build_failure_stubs, write_jsonl
 from src.article_discovery.discoverers.jamaica_observer_archive_discoverer import (
     JamaicaObserverArchiveDiscoverer,
 )
-from src.article_discovery.models import DiscoveredArticle
 
 
-def write_jsonl(articles: list[DiscoveredArticle], output_path: Path) -> None:
-    """
-    Write discovered articles to a JSONL file.
-
-    Each line is a JSON object representing a DiscoveredArticle.
-    Uses Pydantic's model_dump(mode='json') to serialize datetimes to ISO 8601.
-
-    Args:
-        articles: List of articles to write.
-        output_path: Path to output JSONL file.
-    """
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with open(output_path, "w", encoding="utf-8") as f:
-        for article in articles:
-            article_dict = article.model_dump(mode="json")
-            f.write(json.dumps(article_dict, ensure_ascii=False) + "\n")
-
-    logger.info(f"Wrote {len(articles)} articles to {output_path}")
-
-
-def build_failure_stubs(
-    failed_dates: list[str], news_source_id: int
-) -> list[DiscoveredArticle]:
-    """
-    Create stub DiscoveredArticle entries for failed dates.
-
-    These are NOT real articles — they are placeholder entries that identify
-    which dates failed so they can be retried.
-
-    Title format is "FAILED: {date_str}" to match the pattern used
-    by other discovery scripts.
-
-    Args:
-        failed_dates: List of date strings that failed (e.g., "2025-09-15").
-        news_source_id: Database ID of the news source.
-
-    Returns:
-        List of stub DiscoveredArticle instances.
-    """
-    now = datetime.now(timezone.utc)
-    stubs = []
-    for date_str in failed_dates:
-        try:
-            published_date = datetime.strptime(date_str, "%Y-%m-%d").replace(
-                tzinfo=timezone.utc
-            )
-        except ValueError:
-            published_date = None
-
-        stubs.append(
-            DiscoveredArticle(
-                url=f"https://www.jamaicaobserver.com/{date_str.replace('-', '/')}/",
-                news_source_id=news_source_id,
-                section="archive",
-                discovered_at=now,
-                title=f"FAILED: {date_str}",
-                published_date=published_date,
-            )
-        )
-    return stubs
+def _parse_date(date_str: str) -> datetime | None:
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
 
 
 async def main() -> int:
@@ -212,7 +151,11 @@ async def main() -> int:
 
         articles = await discoverer.discover(news_source_id=args.news_source_id)
         failure_stubs = build_failure_stubs(
-            discoverer.failed_dates, args.news_source_id
+            discoverer.failed_dates,
+            args.news_source_id,
+            url_builder=lambda d: f"https://www.jamaicaobserver.com/{d.replace('-', '/')}/",
+            section="archive",
+            date_parser=_parse_date,
         )
 
         elapsed = time.time() - start_time
