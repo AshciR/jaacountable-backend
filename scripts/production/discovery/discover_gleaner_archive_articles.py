@@ -25,7 +25,6 @@ Output:
 
 import argparse
 import asyncio
-import json
 import sys
 import time
 from dataclasses import dataclass
@@ -35,11 +34,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from loguru import logger
 
-# Add project root to path
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
-
 from config.log_config import configure_logging
+from scripts.production.discovery.utils import write_jsonl
 from src.article_discovery.discoverers.gleaner_archive_discoverer import (
     GleanerArchiveDiscoverer,
 )
@@ -225,34 +221,6 @@ async def discover_month_with_tracking(
             success=False,
             error=str(e),
         )
-
-
-def write_jsonl(articles: list[DiscoveredArticle], output_path: Path) -> None:
-    """
-    Write discovered articles to JSONL file.
-
-    Each line in the file is a JSON object representing a DiscoveredArticle.
-    Uses Pydantic's model_dump(mode='json') to convert datetime to ISO 8601 format.
-
-    Args:
-        articles: List of articles to write
-        output_path: Path to output JSONL file
-
-    Raises:
-        IOError: If file writing fails
-    """
-    # Create parent directory if needed
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Write JSONL
-    with open(output_path, "w", encoding="utf-8") as f:
-        for article in articles:
-            # Convert Pydantic model to dict with JSON-serializable values
-            article_dict = article.model_dump(mode="json")
-            # Write as JSON line (one object per line)
-            f.write(json.dumps(article_dict, ensure_ascii=False) + "\n")
-
-    logger.info(f"Wrote {len(articles)} articles to {output_path}")
 
 
 async def main() -> int:
