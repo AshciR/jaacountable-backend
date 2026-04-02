@@ -19,6 +19,10 @@ from alembic.config import Config
 from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
+import boto3
+from botocore.config import Config as BotocoreConfig
+from testcontainers.localstack import LocalStackContainer
+
 from config.database import DatabaseConfig
 from src.cache.redis_cache import RedisCacheBackend
 
@@ -194,3 +198,37 @@ async def db_connection(
         finally:
             # Roll back the transaction to ensure test isolation
             await transaction.rollback()
+
+
+@pytest.fixture(scope="session")
+def localstack_container() -> Generator[LocalStackContainer, None, None]:
+    """Start a LocalStack container for the test session."""
+    with LocalStackContainer() as container:
+        yield container
+
+
+@pytest.fixture(scope="session")
+def s3_client(localstack_container: LocalStackContainer):
+    """Factory fixture that returns a boto3 S3 client and creates the named bucket.
+
+    Usage in tests:
+        def test_something(s3_client):
+            client = s3_client("my-test-bucket")
+    """
+    _created_buckets: set[str] = set()
+
+    def _make_client(bucket_name: str):
+        client = boto3.client(
+            "s3",
+            endpoint_url=localstack_container.get_url(),
+            aws_access_key_id="test",
+            aws_secret_access_key="test",
+            region_name="us-east-1",
+            config=BotocoreConfig(s3={"addressing_style": "path"}),
+        )
+        if bucket_name not in _created_buckets:
+            client.create_bucket(Bucket=bucket_name)
+            _created_buckets.add(bucket_name)
+        return client
+
+    return _make_client

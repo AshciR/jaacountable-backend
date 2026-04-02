@@ -28,7 +28,8 @@ dependencies = [
     "rich>=14.2.0",
     "sentry-sdk>=2.56.0",
     "redis[hiredis]>=5.0.0",
-    "testcontainers[postgres,redis]>=4.13.3",
+    "boto3>=1.42.82",
+    "testcontainers[postgres,redis,localstack]>=4.13.3",
 ]
 
 [tool.pytest.ini_options]

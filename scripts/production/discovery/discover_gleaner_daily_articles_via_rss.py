@@ -23,6 +23,8 @@ Output:
 
 import argparse
 import asyncio
+import os
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,9 +32,10 @@ from pathlib import Path
 from loguru import logger
 
 from config.log_config import configure_logging
-from scripts.production.discovery.utils import write_jsonl
+from scripts.production.discovery.utils import upload_jsonl_to_s3, upload_log_to_s3, write_jsonl
 from src.article_discovery.discoverers.gleaner_rss_discoverer import GleanerRssFeedDiscoverer
 from src.article_discovery.models import RssFeedConfig
+from src.storage.s3 import get_s3_client
 
 FEED_CONFIGS = [
     RssFeedConfig(url="https://jamaica-gleaner.com/feed/rss.xml", section="lead-stories"),
@@ -62,6 +65,11 @@ async def main() -> int:
         action="store_true",
         help="Enable debug-level logging",
     )
+    parser.add_argument(
+        "--skip-upload",
+        action="store_true",
+        help="Skip S3 upload (useful for local dev without LocalStack running)",
+    )
 
     args = parser.parse_args()
 
@@ -85,7 +93,10 @@ async def main() -> int:
     success_path = output_dir / f"gleaner_daily_{today}.jsonl"
     failures_path = output_dir / f"gleaner_daily_{today}-failures.jsonl"
 
-    # Run discovery
+    s3 = None
+    bucket = None
+    exit_code = 0
+
     try:
         start_time = time.time()
 
@@ -100,6 +111,17 @@ async def main() -> int:
         # fail-soft internally. With only 2 fixed feeds, selective retry is not
         # useful — re-run the whole script if a feed fails.
         write_jsonl([], failures_path)
+
+        # Upload JSONL files to S3
+        if args.skip_upload:
+            logger.info("Skipping S3 upload (--skip-upload flag set)")
+        else:
+            bucket = os.environ["S3_BUCKET"]
+            s3 = get_s3_client()
+            upload_jsonl_to_s3(s3, success_path, bucket, news_source="gleaner", date_str=today)
+            upload_jsonl_to_s3(
+                s3, failures_path, bucket, news_source="gleaner", date_str=f"{today}-failures"
+            )
 
         # Summary
         logger.info("=" * 70)
@@ -123,11 +145,20 @@ async def main() -> int:
 
         logger.info("=" * 70)
 
-        return 0
-
     except Exception as e:
         logger.error(f"Discovery failed: {e}", exc_info=True)
-        return 1
+        exit_code = 1
+
+    finally:
+        # Flush and close the file sink so the log is fully written before upload
+        logger.remove()
+        if not args.skip_upload and s3 is not None and bucket is not None:
+            try:
+                upload_log_to_s3(s3, log_file_path, bucket, news_source="gleaner", timestamp=timestamp)
+            except Exception as e:
+                print(f"Warning: failed to upload log to S3: {e}", file=sys.stderr)
+
+    return exit_code
 
 
 if __name__ == "__main__":
