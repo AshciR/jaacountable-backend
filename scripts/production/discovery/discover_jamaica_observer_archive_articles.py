@@ -7,16 +7,16 @@ to discover News category articles. Covers the period not available via sitemaps
 
 Usage:
     # Discover Sep 2025 → Feb 2026
-    uv run python scripts/production/discovery/discover_jamaica_observer_archive_articles.py \\
+    PYTHONPATH=. uv run python scripts/production/discovery/discover_jamaica_observer_archive_articles.py \\
         --start-date 2025-09-01 --end-date 2026-02-25
 
     # Discover with custom delay and output directory
-    uv run python scripts/production/discovery/discover_jamaica_observer_archive_articles.py \\
+    PYTHONPATH=. uv run python scripts/production/discovery/discover_jamaica_observer_archive_articles.py \\
         --start-date 2025-09-01 --end-date 2026-02-25 \\
         --delay 2.0 --output-dir /path/to/output
 
     # Verbose output for debugging
-    uv run python scripts/production/discovery/discover_jamaica_observer_archive_articles.py \\
+    PYTHONPATH=. uv run python scripts/production/discovery/discover_jamaica_observer_archive_articles.py \\
         --start-date 2025-09-01 --end-date 2026-02-25 --verbose
 
 Output:

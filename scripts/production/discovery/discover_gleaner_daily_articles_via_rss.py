@@ -1,0 +1,135 @@
+"""
+Production daily discovery script for Jamaica Gleaner articles via RSS.
+
+Fetches current RSS feeds and exports results to JSONL format for pipeline ingestion.
+
+Usage:
+    # Discover with default settings
+    PYTHONPATH=. uv run python scripts/production/discovery/discover_gleaner_daily_articles_via_rss.py
+
+    # Discover with custom output directory
+    PYTHONPATH=. uv run python scripts/production/discovery/discover_gleaner_daily_articles_via_rss.py \\
+        --output-dir /path/to/output
+
+    # Verbose output for debugging
+    PYTHONPATH=. uv run python scripts/production/discovery/discover_gleaner_daily_articles_via_rss.py \\
+        --verbose
+
+Output:
+    - Success file: {output_dir}/gleaner_daily_{date}.jsonl
+    - Failures file: {output_dir}/gleaner_daily_{date}-failures.jsonl
+    - Log file: {output_dir}/gleaner_daily_discovery_{timestamp}.log
+"""
+
+import argparse
+import asyncio
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+from loguru import logger
+
+from config.log_config import configure_logging
+from scripts.production.discovery.utils import write_jsonl
+from src.article_discovery.discoverers.gleaner_rss_discoverer import GleanerRssFeedDiscoverer
+from src.article_discovery.models import RssFeedConfig
+
+FEED_CONFIGS = [
+    RssFeedConfig(url="https://jamaica-gleaner.com/feed/rss.xml", section="lead-stories"),
+    RssFeedConfig(url="https://jamaica-gleaner.com/feed/news.xml", section="news"),
+]
+
+
+async def main() -> int:
+    """Main entry point."""
+    parser = argparse.ArgumentParser(
+        description="Discover Jamaica Gleaner daily articles via RSS and export to JSONL"
+    )
+    parser.add_argument(
+        "--news-source-id",
+        type=int,
+        default=1,
+        help="Database ID of news source (default: 1 = Jamaica Gleaner)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="scripts/production/discovery/output",
+        help="Output directory path (default: scripts/production/discovery/output)",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable debug-level logging",
+    )
+
+    args = parser.parse_args()
+
+    # Setup output directory and logging
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    log_file_path = output_dir / f"gleaner_daily_discovery_{timestamp}.log"
+
+    configure_logging(
+        enable_file_logging=True,
+        log_file_path=str(log_file_path),
+        log_level="DEBUG" if args.verbose else "INFO",
+    )
+
+    logger.info(f"Gleaner daily discovery logging to: {log_file_path}")
+
+    # Generate output filenames
+    success_path = output_dir / f"gleaner_daily_{today}.jsonl"
+    failures_path = output_dir / f"gleaner_daily_{today}-failures.jsonl"
+
+    # Run discovery
+    try:
+        start_time = time.time()
+
+        discoverer = GleanerRssFeedDiscoverer(feed_configs=FEED_CONFIGS)
+        articles = await discoverer.discover(news_source_id=args.news_source_id)
+
+        elapsed = time.time() - start_time
+
+        # Write output files
+        write_jsonl(articles, success_path)
+        # No explicit failure tracking: the discoverer handles per-feed failures
+        # fail-soft internally. With only 2 fixed feeds, selective retry is not
+        # useful — re-run the whole script if a feed fails.
+        write_jsonl([], failures_path)
+
+        # Summary
+        logger.info("=" * 70)
+        logger.info("Discovery Summary:")
+        logger.info(f"  Total articles discovered: {len(articles)}")
+        logger.info(f"  Date: {today}")
+        logger.info(f"  Feeds: {', '.join(c.url for c in FEED_CONFIGS)}")
+        logger.info(f"  Time elapsed: {elapsed:.2f}s ({elapsed / 60:.2f}m)")
+        logger.info(f"  Success file: {success_path}")
+        logger.info(f"  Failures file: {failures_path}")
+        logger.info(f"  Log file: {log_file_path}")
+
+        # Per-section breakdown
+        if articles:
+            sections: dict[str, int] = {}
+            for article in articles:
+                sections[article.section] = sections.get(article.section, 0) + 1
+            logger.info("  Articles by section:")
+            for section, count in sorted(sections.items()):
+                logger.info(f"    {section}: {count}")
+
+        logger.info("=" * 70)
+
+        return 0
+
+    except Exception as e:
+        logger.error(f"Discovery failed: {e}", exc_info=True)
+        return 1
+
+
+if __name__ == "__main__":
+    exit_code = asyncio.run(main())
+    exit(exit_code)

@@ -6,7 +6,7 @@ and exports results to JSONL format for pipeline ingestion.
 
 Usage:
     # Discover 3 months (Sep, Oct, Nov 2021) using 3 parallel workers
-    uv run python scripts/production/discover_articles.py --year 2021 --start-month 9 --end-month 11 --workers 3
+    PYTHONPATH=. uv run python scripts/production/discover_articles.py --year 2021 --start-month 9 --end-month 11 --workers 3
 
     # Discover 6 months using 4 workers (workers process months sequentially)
     uv run python scripts/production/discover_articles.py --year 2021 --start-month 7 --end-month 12 --workers 4

@@ -6,16 +6,16 @@ News section articles within a given date range.
 
 Usage:
     # Discover Jan 2025 → Feb 2025
-    uv run python scripts/production/discovery/discover_gleaner_archive_articles_via_sitemap.py \\
+    PYTHONPATH=. uv run python scripts/production/discovery/discover_gleaner_archive_articles_via_sitemap.py \\
         --start-date 2025-01-01 --end-date 2025-02-28
 
     # Discover with custom delay and output directory
-    uv run python scripts/production/discovery/discover_gleaner_archive_articles_via_sitemap.py \\
+    PYTHONPATH=. uv run python scripts/production/discovery/discover_gleaner_archive_articles_via_sitemap.py \\
         --start-date 2025-01-01 --end-date 2025-02-28 \\
         --delay 2.0 --output-dir /path/to/output
 
     # Verbose output for debugging
-    uv run python scripts/production/discovery/discover_gleaner_archive_articles_via_sitemap.py \\
+    PYTHONPATH=. uv run python scripts/production/discovery/discover_gleaner_archive_articles_via_sitemap.py \\
         --start-date 2025-01-01 --end-date 2025-02-28 --verbose
 
 Output:
