@@ -5,10 +5,12 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
+from botocore.client import BaseClient
 from config.log_config import configure_logging  # noqa: F401 — re-exported for scripts
 from loguru import logger
 
 from src.article_discovery.models import DiscoveredArticle
+from src.storage.s3 import upload_file
 
 
 def write_jsonl(articles: list[DiscoveredArticle], output_path: Path) -> None:
@@ -28,6 +30,56 @@ def write_jsonl(articles: list[DiscoveredArticle], output_path: Path) -> None:
             f.write(json.dumps(article.model_dump(mode="json"), ensure_ascii=False) + "\n")
 
     logger.info(f"Wrote {len(articles)} articles to {output_path}")
+
+
+def upload_jsonl_to_s3(
+    client: BaseClient,
+    local_path: Path,
+    bucket: str,
+    news_source: str,
+    date_str: str,
+) -> None:
+    """Upload a JSONL discovery file to S3.
+
+    The object key follows the convention: {news_source}/{date_str}.jsonl
+
+    Args:
+        client: Boto3 S3 client.
+        local_path: Path to the local JSONL file to upload.
+        bucket: Target S3 bucket name.
+        news_source: News source identifier used as the top-level folder (e.g. "gleaner").
+        date_str: Date string used as the filename stem (e.g. "2026-04-01").
+
+    Raises:
+        botocore.exceptions.BotoCoreError: On upload failure.
+    """
+    key = f"{news_source}/{date_str}.jsonl"
+    upload_file(client, local_path, bucket, key, content_type="application/x-ndjson")
+
+
+def upload_log_to_s3(
+    client: BaseClient,
+    local_path: Path,
+    bucket: str,
+    news_source: str,
+    timestamp: str,
+) -> None:
+    """Upload a log file to S3.
+
+    The object key follows the convention: {news_source}/logs/{timestamp}.log
+
+    Args:
+        client: Boto3 S3 client.
+        local_path: Path to the local log file to upload.
+        bucket: Target S3 bucket name.
+        news_source: News source identifier used as the top-level folder (e.g. "gleaner").
+        timestamp: Timestamp string used as the filename stem (e.g. "2026-04-01_12-30-00").
+
+    Raises:
+        botocore.exceptions.BotoCoreError: On upload failure.
+    """
+    key = f"{news_source}/logs/{timestamp}.log"
+    upload_file(client, local_path, bucket, key, content_type="text/plain")
 
 
 def build_failure_stubs(
