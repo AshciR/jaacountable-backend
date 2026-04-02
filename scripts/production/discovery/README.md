@@ -1,10 +1,22 @@
-# Production Archive Discovery
+# Production Discovery Scripts
 
-Production-ready script for discovering articles from Jamaica Gleaner archives and exporting to JSONL format for pipeline ingestion.
+Production-ready scripts for discovering articles from news sources and exporting to JSONL format for pipeline ingestion.
+
+## Prerequisites: PYTHONPATH
+
+All scripts in this directory import from project-root packages (`config`, `src`, `scripts`). Because `uv run` does not add the project root to `sys.path` automatically, you must prefix every command with `PYTHONPATH=.`:
+
+```bash
+PYTHONPATH=. uv run python scripts/production/discovery/<script>.py [args]
+```
+
+Running without `PYTHONPATH=.` will raise `ModuleNotFoundError: No module named 'config'`.
+
+---
 
 ## Overview
 
-This script uses parallel workers to discover articles from historical archive pages and exports the results to JSONL files. It provides robust failure tracking with retry capabilities.
+These scripts discover articles from various news sources and export the results to JSONL files. They provide robust failure tracking with retry capabilities.
 
 ## Features
 
@@ -14,14 +26,72 @@ This script uses parallel workers to discover articles from historical archive p
 - **Configurable**: Customizable worker count, crawl delay, and output directory
 - **Respectful Crawling**: Configurable delay between requests (default: 0.5s)
 
-## Usage
+## Scripts
+
+| Script | Source | When to use |
+|--------|--------|-------------|
+| `discover_gleaner_daily_articles_via_rss.py` | Jamaica Gleaner RSS feeds | Daily discovery of current articles |
+| `discover_gleaner_archive_articles_via_sitemap.py` | Jamaica Gleaner sitemap | Historical discovery via sitemap (date range) |
+| `discover_gleaner_archive_articles.py` | Jamaica Gleaner archive pages | Historical discovery via archive pages (parallel, month-based) |
+| `discover_jamaica_observer_articles_via_sitemap.py` | Jamaica Observer sitemap | Historical discovery via sitemap (date range) |
+| `discover_jamaica_observer_archive_articles.py` | Jamaica Observer archive pages | Historical discovery via archive pages (date range) |
+
+---
+
+## Daily RSS Discovery (Gleaner)
+
+`discover_gleaner_daily_articles_via_rss.py` fetches the current Jamaica Gleaner RSS feeds and exports articles to JSONL. Intended for daily scheduled runs.
+
+### Usage
+
+```bash
+# Discover with default settings
+PYTHONPATH=. uv run python scripts/production/discovery/discover_gleaner_daily_articles_via_rss.py
+
+# Custom output directory
+PYTHONPATH=. uv run python scripts/production/discovery/discover_gleaner_daily_articles_via_rss.py \
+    --output-dir /path/to/output
+
+# Verbose output for debugging
+PYTHONPATH=. uv run python scripts/production/discovery/discover_gleaner_daily_articles_via_rss.py \
+    --verbose
+```
+
+### CLI Arguments
+
+| Argument | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `--news-source-id` | No | `1` | Database ID of news source (Jamaica Gleaner) |
+| `--output-dir` | No | `scripts/production/discovery/output` | Output directory path |
+| `--verbose` | No | false | Enable debug-level logging |
+
+### Feeds
+
+Both feeds are hardcoded — they always reflect current published content:
+
+| Feed URL | Section |
+|----------|---------|
+| `https://jamaica-gleaner.com/feed/rss.xml` | `lead-stories` |
+| `https://jamaica-gleaner.com/feed/news.xml` | `news` |
+
+### Output Files
+
+- **Success**: `gleaner_daily_{YYYY-MM-DD}.jsonl` — discovered articles
+- **Failures**: `gleaner_daily_{YYYY-MM-DD}-failures.jsonl` — always empty (per-feed failures are handled fail-soft internally; re-run the script if a feed fails)
+- **Log**: `gleaner_daily_discovery_{timestamp}.log`
+
+---
+
+## Archive Discovery (Gleaner & Observer)
+
+### Usage
 
 ### Basic Usage
 
 Discover 3 months (September-November 2021) using default settings:
 
 ```bash
-uv run python scripts/production/discover_gleaner_archive_articles.py \
+PYTHONPATH=. uv run python scripts/production/discover_gleaner_archive_articles.py \
     --year 2021 \
     --start-month 9 \
     --end-month 11
@@ -32,7 +102,7 @@ uv run python scripts/production/discover_gleaner_archive_articles.py \
 Discover entire year using 4 parallel workers:
 
 ```bash
-uv run python scripts/production/discover_gleaner_archive_articles.py \
+PYTHONPATH=. uv run python scripts/production/discover_gleaner_archive_articles.py \
     --year 2021 \
     --start-month 1 \
     --end-month 12 \
@@ -44,7 +114,7 @@ uv run python scripts/production/discover_gleaner_archive_articles.py \
 Specify custom crawl delay and output directory:
 
 ```bash
-uv run python scripts/production/discover_gleaner_archive_articles.py \
+PYTHONPATH=. uv run python scripts/production/discover_gleaner_archive_articles.py \
     --year 2021 \
     --start-month 9 \
     --end-month 11 \
@@ -147,13 +217,13 @@ Re-run the script for only the failed months:
 
 ```bash
 # Retry September 2021
-uv run python scripts/production/discover_gleaner_archive_articles.py \
+PYTHONPATH=. uv run python scripts/production/discover_gleaner_archive_articles.py \
     --year 2021 \
     --start-month 9 \
     --end-month 9
 
 # Retry November 2021
-uv run python scripts/production/discover_gleaner_archive_articles.py \
+PYTHONPATH=. uv run python scripts/production/discover_gleaner_archive_articles.py \
     --year 2021 \
     --start-month 11 \
     --end-month 11
@@ -237,22 +307,22 @@ Large discoveries (1+ years) may use significant memory. Consider:
 
 ```bash
 # Q1 2021
-uv run python scripts/production/discover_gleaner_archive_articles.py \
+PYTHONPATH=. uv run python scripts/production/discover_gleaner_archive_articles.py \
     --year 2021 --start-month 1 --end-month 3 \
     --workers 3
 
 # Q2 2021
-uv run python scripts/production/discover_gleaner_archive_articles.py \
+PYTHONPATH=. uv run python scripts/production/discover_gleaner_archive_articles.py \
     --year 2021 --start-month 4 --end-month 6 \
     --workers 3
 
 # Q3 2021
-uv run python scripts/production/discover_gleaner_archive_articles.py \
+PYTHONPATH=. uv run python scripts/production/discover_gleaner_archive_articles.py \
     --year 2021 --start-month 7 --end-month 9 \
     --workers 3
 
 # Q4 2021
-uv run python scripts/production/discover_gleaner_archive_articles.py \
+PYTHONPATH=. uv run python scripts/production/discover_gleaner_archive_articles.py \
     --year 2021 --start-month 10 --end-month 12 \
     --workers 3
 ```
@@ -261,7 +331,7 @@ uv run python scripts/production/discover_gleaner_archive_articles.py \
 
 ```bash
 for year in 2019 2020 2021; do
-    uv run python scripts/production/discover_gleaner_archive_articles.py \
+    PYTHONPATH=. uv run python scripts/production/discover_gleaner_archive_articles.py \
         --year $year \
         --start-month 1 \
         --end-month 12 \

@@ -6,16 +6,16 @@ a target date range and exports results to JSONL format for pipeline ingestion.
 
 Usage:
     # Discover 1 year (Jan 2020 → Jan 2021) with default settings
-    uv run python scripts/production/discovery/discover_jamaica_observer_articles_via_sitemap.py \\
+    PYTHONPATH=. uv run python scripts/production/discovery/discover_jamaica_observer_articles_via_sitemap.py \\
         --start-date 2020-01-01 --end-date 2021-01-01
 
     # Discover with custom delay and output directory
-    uv run python scripts/production/discovery/discover_jamaica_observer_articles_via_sitemap.py \\
+    PYTHONPATH=. uv run python scripts/production/discovery/discover_jamaica_observer_articles_via_sitemap.py \\
         --start-date 2020-01-01 --end-date 2021-01-01 \\
         --delay 2.0 --output-dir /path/to/output
 
     # Verbose output for debugging
-    uv run python scripts/production/discovery/discover_jamaica_observer_articles_via_sitemap.py \\
+    PYTHONPATH=. uv run python scripts/production/discovery/discover_jamaica_observer_articles_via_sitemap.py \\
         --start-date 2020-01-01 --end-date 2021-01-01 --verbose
 
 Output:
