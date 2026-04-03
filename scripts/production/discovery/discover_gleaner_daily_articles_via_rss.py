@@ -90,8 +90,8 @@ async def main() -> int:
     logger.info(f"Gleaner daily discovery logging to: {log_file_path}")
 
     # Generate output filenames
-    success_path = output_dir / f"gleaner_daily_{today}.jsonl"
-    failures_path = output_dir / f"gleaner_daily_{today}-failures.jsonl"
+    success_path = output_dir / f"gleaner_daily_{timestamp}.jsonl"
+    failures_path = output_dir / f"gleaner_daily_{timestamp}-failures.jsonl"
 
     s3 = None
     bucket = None
@@ -118,9 +118,9 @@ async def main() -> int:
         else:
             bucket = os.environ["S3_BUCKET"]
             s3 = get_s3_client()
-            upload_jsonl_to_s3(s3, success_path, bucket, news_source="gleaner", date_str=today)
+            upload_jsonl_to_s3(s3, success_path, bucket, news_source="gleaner", date_str=timestamp)
             upload_jsonl_to_s3(
-                s3, failures_path, bucket, news_source="gleaner", date_str=f"{today}-failures"
+                s3, failures_path, bucket, news_source="gleaner", date_str=f"{timestamp}-failures"
             )
 
         # Summary
@@ -133,6 +133,8 @@ async def main() -> int:
         logger.info(f"  Success file: {success_path}")
         logger.info(f"  Failures file: {failures_path}")
         logger.info(f"  Log file: {log_file_path}")
+        if bucket:
+            logger.info(f"  S3 location: s3://{bucket}/gleaner/{timestamp}.jsonl")
 
         # Per-section breakdown
         if articles:
