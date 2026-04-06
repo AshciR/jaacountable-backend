@@ -69,6 +69,7 @@ class DefaultArticleExtractionService:
         """
         self._http_client = httpx.AsyncClient(
             timeout=30.0,
+            follow_redirects=True,
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             },
@@ -122,6 +123,7 @@ class DefaultArticleExtractionService:
             # Backward compatibility: create temporary client
             async with httpx.AsyncClient(
                 timeout=30.0,
+                follow_redirects=True,
                 headers={
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
                 },

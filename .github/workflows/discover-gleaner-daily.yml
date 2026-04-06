@@ -1,4 +1,4 @@
-name: Discover Gleaner Daily Articles
+name: Discover & Classify Gleaner Daily Articles
 
 on:
   schedule:
@@ -17,8 +17,8 @@ on:
           - production
 
 jobs:
-  discover:
-    name: Run daily discovery (${{ inputs.environment || vars.CRON_ENVIRONMENT || 'staging' }})
+  discover-and-classify:
+    name: Discover & classify [${{ inputs.environment || vars.CRON_ENVIRONMENT || 'staging' }}]
     runs-on: ubuntu-latest
 
     env:
@@ -38,7 +38,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
-      - name: Set S3 secrets
+      - name: Set environment secrets
         run: |
           if [ "$TARGET_ENV" = "production" ]; then
             echo "S3_ENDPOINT_URL=${{ secrets.PROD_S3_ENDPOINT_URL }}" >> $GITHUB_ENV
@@ -46,13 +46,24 @@ jobs:
             echo "S3_SECRET_ACCESS_KEY=${{ secrets.PROD_S3_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
             echo "S3_REGION=${{ secrets.PROD_S3_REGION }}" >> $GITHUB_ENV
             echo "S3_BUCKET=${{ secrets.PROD_S3_BUCKET }}" >> $GITHUB_ENV
+            echo "DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}" >> $GITHUB_ENV
+            echo "OPENAI_API_KEY=${{ secrets.PROD_OPENAI_API_KEY }}" >> $GITHUB_ENV
           else
             echo "S3_ENDPOINT_URL=${{ secrets.STAGING_S3_ENDPOINT_URL }}" >> $GITHUB_ENV
             echo "S3_ACCESS_KEY_ID=${{ secrets.STAGING_S3_ACCESS_KEY_ID }}" >> $GITHUB_ENV
             echo "S3_SECRET_ACCESS_KEY=${{ secrets.STAGING_S3_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
             echo "S3_REGION=${{ secrets.STAGING_S3_REGION }}" >> $GITHUB_ENV
             echo "S3_BUCKET=${{ secrets.STAGING_S3_BUCKET }}" >> $GITHUB_ENV
+            echo "DATABASE_URL=${{ secrets.STAGING_DATABASE_URL }}" >> $GITHUB_ENV
+            echo "OPENAI_API_KEY=${{ secrets.STAGING_OPENAI_API_KEY }}" >> $GITHUB_ENV
           fi
 
       - name: Run discovery
         run: PYTHONPATH=. uv run python scripts/production/discovery/discover_gleaner_daily_articles_via_rss.py
+
+      - name: Run classification
+        run: |
+          PYTHONPATH=. uv run python scripts/production/classification/process_articles_batch.py \
+            --input scripts/production/discovery/output/gleaner_daily_????-??-??_??-??-??.jsonl \
+            --skip-existing \
+            --concurrency 4
