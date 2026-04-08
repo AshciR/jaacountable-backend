@@ -63,6 +63,14 @@ if [ "${SEED_DB}" = "true" ]; then
 fi
 
 echo ""
+echo "Starting LocalStack..."
+"${SCRIPT_DIR}/start-localstack.sh"
+
+echo ""
+echo "Provisioning S3 buckets..."
+"${SCRIPT_DIR}/create-s3-buckets.sh"
+
+echo ""
 echo "Starting Redis and app..."
 docker compose $COMPOSE_FILES up -d --build --scale app="$REPLICAS" app
 

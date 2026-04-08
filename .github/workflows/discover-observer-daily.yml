@@ -1,0 +1,71 @@
+name: Discover & Classify Observer Daily Articles
+
+on:
+  schedule:
+    - cron: "30 13 * * *"  # 8:30 am JST (UTC-5), 1 hour after Gleaner
+    - cron: "30 18 * * *"  # 1:30 pm JST (UTC-5), 1 hour after Gleaner
+    - cron: "30 00 * * *"  # 7:30 pm JST (UTC-5), 1 hour after Gleaner
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: false
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  discover-and-classify:
+    name: Discover & classify Observer [${{ inputs.environment || vars.CRON_ENVIRONMENT || 'staging' }}]
+    runs-on: ubuntu-latest
+
+    env:
+      TARGET_ENV: ${{ inputs.environment || vars.CRON_ENVIRONMENT || 'staging' }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.9.8"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Set environment secrets
+        run: |
+          if [ "$TARGET_ENV" = "production" ]; then
+            echo "S3_ENDPOINT_URL=${{ secrets.PROD_S3_ENDPOINT_URL }}" >> $GITHUB_ENV
+            echo "S3_ACCESS_KEY_ID=${{ secrets.PROD_S3_ACCESS_KEY_ID }}" >> $GITHUB_ENV
+            echo "S3_SECRET_ACCESS_KEY=${{ secrets.PROD_S3_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
+            echo "S3_REGION=${{ secrets.PROD_S3_REGION }}" >> $GITHUB_ENV
+            echo "S3_BUCKET=${{ secrets.PROD_S3_BUCKET }}" >> $GITHUB_ENV
+            echo "DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}" >> $GITHUB_ENV
+            echo "OPENAI_API_KEY=${{ secrets.PROD_OPENAI_API_KEY }}" >> $GITHUB_ENV
+          else
+            echo "S3_ENDPOINT_URL=${{ secrets.STAGING_S3_ENDPOINT_URL }}" >> $GITHUB_ENV
+            echo "S3_ACCESS_KEY_ID=${{ secrets.STAGING_S3_ACCESS_KEY_ID }}" >> $GITHUB_ENV
+            echo "S3_SECRET_ACCESS_KEY=${{ secrets.STAGING_S3_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
+            echo "S3_REGION=${{ secrets.STAGING_S3_REGION }}" >> $GITHUB_ENV
+            echo "S3_BUCKET=${{ secrets.STAGING_S3_BUCKET }}" >> $GITHUB_ENV
+            echo "DATABASE_URL=${{ secrets.STAGING_DATABASE_URL }}" >> $GITHUB_ENV
+            echo "OPENAI_API_KEY=${{ secrets.STAGING_OPENAI_API_KEY }}" >> $GITHUB_ENV
+          fi
+
+      - name: Run discovery
+        run: |
+          PYTHONPATH=. uv run python scripts/production/discovery/discover_observer_daily_articles_via_rss.py \
+            --skip-existing
+
+      - name: Run classification
+        run: |
+          PYTHONPATH=. uv run python scripts/production/classification/process_articles_batch.py \
+            --input scripts/production/discovery/output/observer_daily_????-??-??_??-??-??.jsonl \
+            --skip-existing \
+            --concurrency 4

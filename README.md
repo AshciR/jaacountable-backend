@@ -26,6 +26,7 @@ The system specifically looks for articles mentioning:
 - Python 3.12 or higher
 - [uv](https://docs.astral.sh/uv/) package manager
 - [Docker](https://www.docker.com/) and Docker Compose (for local database)
+- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) (for LocalStack S3 bucket provisioning)
 
 ### Installation
 

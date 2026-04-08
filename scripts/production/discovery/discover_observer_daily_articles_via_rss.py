@@ -1,24 +1,24 @@
 """
-Production daily discovery script for Jamaica Gleaner articles via RSS.
+Production daily discovery script for Jamaica Observer articles via RSS.
 
 Fetches current RSS feeds and exports results to JSONL format for pipeline ingestion.
 
 Usage:
     # Discover with default settings
-    PYTHONPATH=. uv run python scripts/production/discovery/discover_gleaner_daily_articles_via_rss.py
+    PYTHONPATH=. uv run python scripts/production/discovery/discover_observer_daily_articles_via_rss.py
 
     # Discover with custom output directory
-    PYTHONPATH=. uv run python scripts/production/discovery/discover_gleaner_daily_articles_via_rss.py \\
+    PYTHONPATH=. uv run python scripts/production/discovery/discover_observer_daily_articles_via_rss.py \\
         --output-dir /path/to/output
 
     # Verbose output for debugging
-    PYTHONPATH=. uv run python scripts/production/discovery/discover_gleaner_daily_articles_via_rss.py \\
+    PYTHONPATH=. uv run python scripts/production/discovery/discover_observer_daily_articles_via_rss.py \\
         --verbose
 
 Output:
-    - Success file: {output_dir}/gleaner_daily_{date}.jsonl
-    - Failures file: {output_dir}/gleaner_daily_{date}-failures.jsonl
-    - Log file: {output_dir}/gleaner_daily_discovery_{timestamp}.log
+    - Success file: {output_dir}/observer_daily_{timestamp}.jsonl
+    - Failures file: {output_dir}/observer_daily_{timestamp}-failures.jsonl
+    - Log file: {output_dir}/observer_daily_discovery_{timestamp}.log
 """
 
 import argparse
@@ -39,27 +39,35 @@ from scripts.production.discovery.utils import (
     upload_log_to_s3,
     write_jsonl,
 )
-from src.article_discovery.discoverers.gleaner_rss_discoverer import GleanerRssFeedDiscoverer
+from src.article_discovery.discoverers.jamaica_observer_rss_discoverer import (
+    JamaicaObserverRssFeedDiscoverer,
+)
 from src.article_discovery.models import RssFeedConfig
 from src.article_persistence.repositories.article_repository import ArticleRepository
 from src.storage.s3 import get_s3_client
 
 FEED_CONFIGS = [
-    RssFeedConfig(url="https://jamaica-gleaner.com/feed/rss.xml", section="lead-stories"),
-    RssFeedConfig(url="https://jamaica-gleaner.com/feed/news.xml", section="news"),
+    RssFeedConfig(
+        url="https://www.jamaicaobserver.com/app-feed-category/?category=latest-news",
+        section="latest-news",
+    ),
+    RssFeedConfig(
+        url="https://www.jamaicaobserver.com/app-feed-category/?category=news",
+        section="news",
+    ),
 ]
 
 
 async def main() -> int:
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Discover Jamaica Gleaner daily articles via RSS and export to JSONL"
+        description="Discover Jamaica Observer daily articles via RSS and export to JSONL"
     )
     parser.add_argument(
         "--news-source-id",
         type=int,
-        default=1,
-        help="Database ID of news source (default: 1 = Jamaica Gleaner)",
+        default=2,
+        help="Database ID of news source (default: 2 = Jamaica Observer)",
     )
     parser.add_argument(
         "--output-dir",
@@ -91,7 +99,7 @@ async def main() -> int:
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    log_file_path = output_dir / f"gleaner_daily_discovery_{timestamp}.log"
+    log_file_path = output_dir / f"observer_daily_discovery_{timestamp}.log"
 
     configure_logging(
         enable_file_logging=True,
@@ -99,12 +107,12 @@ async def main() -> int:
         log_level="DEBUG" if args.verbose else "INFO",
     )
 
-    logger.info(f"Gleaner daily discovery logging to: {log_file_path}")
+    logger.info(f"Observer daily discovery logging to: {log_file_path}")
     logger.debug(f"skip-existing: {'enabled' if args.skip_existing else 'disabled'}")
 
     # Generate output filenames
-    success_path = output_dir / f"gleaner_daily_{timestamp}.jsonl"
-    failures_path = output_dir / f"gleaner_daily_{timestamp}-failures.jsonl"
+    success_path = output_dir / f"observer_daily_{timestamp}.jsonl"
+    failures_path = output_dir / f"observer_daily_{timestamp}-failures.jsonl"
 
     s3 = None
     bucket = None
@@ -113,24 +121,11 @@ async def main() -> int:
     try:
         start_time = time.time()
 
-        discoverer = GleanerRssFeedDiscoverer(feed_configs=FEED_CONFIGS)
+        discoverer = JamaicaObserverRssFeedDiscoverer(feed_configs=FEED_CONFIGS)
         articles = await discoverer.discover(news_source_id=args.news_source_id)
 
         elapsed = time.time() - start_time
 
-        # The daily discovery script wrote all RSS articles to JSONL
-        # on every run with no DB check, so articles still in the feed on the
-        # 2nd and 3rd cron runs of the day were re-included for classification.
-        # Although  --skip-existing in the classification script was a safety net,
-        # any gap there (URL mismatch, race condition) would allow redundant
-        # extraction and classification.
-        #
-        # Fix: Added --skip-existing to the discovery script that pre-queries
-        # the DB via ArticleRepository.get_existing_urls() and strips
-        # already-stored URLs from the JSONL before the classification pipeline runs.
-        # The workflow now passes this flag at the discovery step,
-        # eliminating redundant processing at the earliest possible stage.
-        # Issue: https://github.com/AshciR/jaacountable-backend/issues/210
         if args.skip_existing and articles:
             await db_config.create_pool(min_size=1, max_size=2, command_timeout=30.0)
             articles = await filter_existing_articles(
@@ -141,9 +136,6 @@ async def main() -> int:
 
         # Write output files
         write_jsonl(articles, success_path)
-        # No explicit failure tracking: the discoverer handles per-feed failures
-        # fail-soft internally. With only 2 fixed feeds, selective retry is not
-        # useful — re-run the whole script if a feed fails.
         write_jsonl([], failures_path)
 
         # Upload JSONL files to S3
@@ -152,9 +144,9 @@ async def main() -> int:
         else:
             bucket = os.environ["S3_BUCKET"]
             s3 = get_s3_client()
-            upload_jsonl_to_s3(s3, success_path, bucket, news_source="gleaner", date_str=timestamp)
+            upload_jsonl_to_s3(s3, success_path, bucket, news_source="observer", date_str=timestamp)
             upload_jsonl_to_s3(
-                s3, failures_path, bucket, news_source="gleaner", date_str=f"{timestamp}-failures"
+                s3, failures_path, bucket, news_source="observer", date_str=f"{timestamp}-failures"
             )
 
         # Summary
@@ -168,7 +160,7 @@ async def main() -> int:
         logger.info(f"  Failures file: {failures_path}")
         logger.info(f"  Log file: {log_file_path}")
         if bucket:
-            logger.info(f"  S3 location: s3://{bucket}/gleaner/{timestamp}.jsonl")
+            logger.info(f"  S3 location: s3://{bucket}/observer/{timestamp}.jsonl")
 
         # Per-section breakdown
         if articles:
@@ -190,7 +182,7 @@ async def main() -> int:
         logger.remove()
         if not args.skip_upload and s3 is not None and bucket is not None:
             try:
-                upload_log_to_s3(s3, log_file_path, bucket, news_source="gleaner", timestamp=timestamp)
+                upload_log_to_s3(s3, log_file_path, bucket, news_source="observer", timestamp=timestamp)
             except Exception as e:
                 print(f"Warning: failed to upload log to S3: {e}", file=sys.stderr)
 

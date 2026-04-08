@@ -265,6 +265,7 @@ uv run python scripts/parallel_archive_discovery.py \
 **Environment:**
 - Python 3.12+ required
 - Docker & Docker Compose for local PostgreSQL database
+- AWS CLI for LocalStack S3 bucket provisioning (`create-s3-buckets.sh`)
 
 ## Docker Setup
 

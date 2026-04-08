@@ -9,7 +9,9 @@ from botocore.client import BaseClient
 from config.log_config import configure_logging  # noqa: F401 — re-exported for scripts
 from loguru import logger
 
+from config.database import DatabaseConfig
 from src.article_discovery.models import DiscoveredArticle
+from src.article_persistence.repositories.article_repository import ArticleRepository
 from src.storage.s3 import upload_file
 
 
@@ -80,6 +82,41 @@ def upload_log_to_s3(
     """
     key = f"{news_source}/logs/{timestamp}.log"
     upload_file(client, local_path, bucket, key, content_type="text/plain")
+
+
+async def filter_existing_articles(
+    articles: list[DiscoveredArticle],
+    db: DatabaseConfig,
+    article_repo: ArticleRepository,
+) -> list[DiscoveredArticle]:
+    """
+    Query the DB for already-stored URLs and return only the new articles.
+
+    Args:
+        articles: Discovered articles to filter.
+        db: DatabaseConfig instance used to acquire a connection.
+        article_repo: ArticleRepository used to batch-query existing URLs.
+
+    Returns:
+        Subset of articles whose URLs are not yet in the database.
+    """
+    logger.debug(f"skip-existing: querying DB for {len(articles)} discovered URLs")
+
+    async with db.connection() as conn:
+        all_urls = [a.url for a in articles]
+        existing_urls = await article_repo.get_existing_urls(conn, all_urls)
+
+    logger.debug(f"skip-existing: {len(existing_urls)} existing URLs found in DB")
+    for url in sorted(existing_urls):
+        logger.debug(f"skip-existing: already stored → {url}")
+
+    before = len(articles)
+    filtered = [a for a in articles if a.url not in existing_urls]
+    logger.info(
+        f"skip-existing: {len(existing_urls)} already stored, "
+        f"{before - len(filtered)} filtered out, {len(filtered)} remain"
+    )
+    return filtered
 
 
 def build_failure_stubs(
