@@ -31,16 +31,53 @@ from pathlib import Path
 
 from loguru import logger
 
+from config.database import DatabaseConfig, db_config
 from config.log_config import configure_logging
 from scripts.production.discovery.utils import upload_jsonl_to_s3, upload_log_to_s3, write_jsonl
 from src.article_discovery.discoverers.gleaner_rss_discoverer import GleanerRssFeedDiscoverer
-from src.article_discovery.models import RssFeedConfig
+from src.article_discovery.models import DiscoveredArticle, RssFeedConfig
+from src.article_persistence.repositories.article_repository import ArticleRepository
 from src.storage.s3 import get_s3_client
 
 FEED_CONFIGS = [
     RssFeedConfig(url="https://jamaica-gleaner.com/feed/rss.xml", section="lead-stories"),
     RssFeedConfig(url="https://jamaica-gleaner.com/feed/news.xml", section="news"),
 ]
+
+
+async def filter_existing_articles(
+    articles: list[DiscoveredArticle],
+    db: DatabaseConfig,
+    article_repo: ArticleRepository,
+) -> list[DiscoveredArticle]:
+    """
+    Query the DB for already-stored URLs and return only the new articles.
+
+    Args:
+        articles: Discovered articles to filter.
+        db: DatabaseConfig instance used to acquire a connection.
+        article_repo: ArticleRepository used to batch-query existing URLs.
+
+    Returns:
+        Subset of articles whose URLs are not yet in the database.
+    """
+    logger.debug(f"skip-existing: querying DB for {len(articles)} discovered URLs")
+
+    async with db.connection() as conn:
+        all_urls = [a.url for a in articles]
+        existing_urls = await article_repo.get_existing_urls(conn, all_urls)
+
+    logger.debug(f"skip-existing: {len(existing_urls)} existing URLs found in DB")
+    for url in sorted(existing_urls):
+        logger.debug(f"skip-existing: already stored → {url}")
+
+    before = len(articles)
+    filtered = [a for a in articles if a.url not in existing_urls]
+    logger.info(
+        f"skip-existing: {len(existing_urls)} already stored, "
+        f"{before - len(filtered)} filtered out, {len(filtered)} remain"
+    )
+    return filtered
 
 
 async def main() -> int:
@@ -70,6 +107,11 @@ async def main() -> int:
         action="store_true",
         help="Skip S3 upload (useful for local dev without LocalStack running)",
     )
+    parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Pre-query DB and exclude already-stored URLs from the JSONL output",
+    )
 
     args = parser.parse_args()
 
@@ -88,6 +130,7 @@ async def main() -> int:
     )
 
     logger.info(f"Gleaner daily discovery logging to: {log_file_path}")
+    logger.debug(f"skip-existing: {'enabled' if args.skip_existing else 'disabled'}")
 
     # Generate output filenames
     success_path = output_dir / f"gleaner_daily_{timestamp}.jsonl"
@@ -104,6 +147,27 @@ async def main() -> int:
         articles = await discoverer.discover(news_source_id=args.news_source_id)
 
         elapsed = time.time() - start_time
+
+        # The daily discovery script wrote all RSS articles to JSONL
+        # on every run with no DB check, so articles still in the feed on the
+        # 2nd and 3rd cron runs of the day were re-included for classification.
+        # Although  --skip-existing in the classification script was a safety net,
+        # any gap there (URL mismatch, race condition) would allow redundant
+        # extraction and classification.
+        #
+        # Fix: Added --skip-existing to the discovery script that pre-queries
+        # the DB via ArticleRepository.get_existing_urls() and strips
+        # already-stored URLs from the JSONL before the classification pipeline runs.
+        # The workflow now passes this flag at the discovery step,
+        # eliminating redundant processing at the earliest possible stage.
+        # Issue: https://github.com/AshciR/jaacountable-backend/issues/210
+        if args.skip_existing and articles:
+            await db_config.create_pool(min_size=1, max_size=2, command_timeout=30.0)
+            articles = await filter_existing_articles(
+                articles=articles,
+                db=db_config,
+                article_repo=ArticleRepository(),
+            )
 
         # Write output files
         write_jsonl(articles, success_path)

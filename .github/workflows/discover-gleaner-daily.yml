@@ -59,7 +59,9 @@ jobs:
           fi
 
       - name: Run discovery
-        run: PYTHONPATH=. uv run python scripts/production/discovery/discover_gleaner_daily_articles_via_rss.py
+        run: |
+          PYTHONPATH=. uv run python scripts/production/discovery/discover_gleaner_daily_articles_via_rss.py \
+            --skip-existing
 
       - name: Run classification
         run: |
