@@ -16,8 +16,8 @@ Usage:
         --verbose
 
 Output:
-    - Success file: {output_dir}/observer_daily_{timestamp}.jsonl
-    - Failures file: {output_dir}/observer_daily_{timestamp}-failures.jsonl
+    - Success file: {output_dir}/observer_daily_discovery_{timestamp}.jsonl
+    - Failures file: {output_dir}/observer_daily_discovery_{timestamp}-failures.jsonl
     - Log file: {output_dir}/observer_daily_discovery_{timestamp}.log
 """
 
@@ -35,9 +35,11 @@ from config.database import db_config
 from config.log_config import configure_logging
 from scripts.production.discovery.utils import (
     filter_existing_articles,
+    write_jsonl,
+)
+from scripts.production.utils import (
     upload_jsonl_to_s3,
     upload_log_to_s3,
-    write_jsonl,
 )
 from src.article_discovery.discoverers.jamaica_observer_rss_discoverer import (
     JamaicaObserverRssFeedDiscoverer,
@@ -97,7 +99,7 @@ async def main() -> int:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     log_file_path = output_dir / f"observer_daily_discovery_{timestamp}.log"
 
@@ -111,8 +113,8 @@ async def main() -> int:
     logger.debug(f"skip-existing: {'enabled' if args.skip_existing else 'disabled'}")
 
     # Generate output filenames
-    success_path = output_dir / f"observer_daily_{timestamp}.jsonl"
-    failures_path = output_dir / f"observer_daily_{timestamp}-failures.jsonl"
+    success_path = output_dir / f"observer_daily_discovery_{timestamp}.jsonl"
+    failures_path = output_dir / f"observer_daily_discovery_{timestamp}-failures.jsonl"
 
     s3 = None
     bucket = None
@@ -144,9 +146,11 @@ async def main() -> int:
         else:
             bucket = os.environ["S3_BUCKET"]
             s3 = get_s3_client()
-            upload_jsonl_to_s3(s3, success_path, bucket, news_source="observer", date_str=timestamp)
             upload_jsonl_to_s3(
-                s3, failures_path, bucket, news_source="observer", date_str=f"{timestamp}-failures"
+                s3, success_path, bucket, news_source="observer", date_str=f"observer_daily_discovery_{timestamp}"
+            )
+            upload_jsonl_to_s3(
+                s3, failures_path, bucket, news_source="observer", date_str=f"observer_daily_discovery_{timestamp}-failures"
             )
 
         # Summary
@@ -160,7 +164,7 @@ async def main() -> int:
         logger.info(f"  Failures file: {failures_path}")
         logger.info(f"  Log file: {log_file_path}")
         if bucket:
-            logger.info(f"  S3 location: s3://{bucket}/observer/{timestamp}.jsonl")
+            logger.info(f"  S3 location: s3://{bucket}/observer/observer_daily_discovery_{timestamp}.jsonl")
 
         # Per-section breakdown
         if articles:
@@ -182,7 +186,7 @@ async def main() -> int:
         logger.remove()
         if not args.skip_upload and s3 is not None and bucket is not None:
             try:
-                upload_log_to_s3(s3, log_file_path, bucket, news_source="observer", timestamp=timestamp)
+                upload_log_to_s3(s3, log_file_path, bucket, news_source="observer", timestamp=timestamp, log_type="daily_discovery")
             except Exception as e:
                 print(f"Warning: failed to upload log to S3: {e}", file=sys.stderr)
 

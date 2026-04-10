@@ -1,5 +1,5 @@
 """
-Production batch orchestration script for processing discovered articles.
+Production batch classification script for discovered articles.
 
 Reads article URLs from JSONL files and processes them through the full pipeline:
 Extract → Classify → Store
@@ -12,8 +12,9 @@ Features:
 - Comprehensive error handling and reporting
 
 Usage:
-    uv run python scripts/production/process_articles_batch.py \\
-        --input scripts/production/output/gleaner_archive_2021_11-11.jsonl \\
+    uv run python scripts/production/classification/classify_articles_batch.py \\
+        --news-source gleaner \\
+        --input scripts/production/discovery/output/gleaner_daily_discovery_2026-04-08_16-52-17.jsonl \\
         --concurrency 4 \\
         --skip-existing
 
@@ -24,6 +25,7 @@ Environment Variables:
 import argparse
 import asyncio
 import json
+import os
 import sys
 import time
 from dataclasses import dataclass, field
@@ -55,10 +57,12 @@ sys.path.insert(0, str(project_root))
 
 from config.database import db_config
 from config.log_config import configure_logging
+from scripts.production.utils import upload_classification_result_to_s3, upload_log_to_s3
 from src.article_discovery.models import DiscoveredArticle
 from src.article_persistence.repositories.article_repository import ArticleRepository
 from src.orchestration.models import OrchestrationResult
 from src.orchestration.service import PipelineOrchestrationService
+from src.storage.s3 import get_s3_client
 
 
 @dataclass
@@ -216,6 +220,58 @@ async def filter_existing_urls(
     )
 
     return filtered_articles, existing_urls
+
+
+def print_completion_summary(
+    stats: BatchStatistics,
+    output_dir: Path,
+    timestamp: str,
+    news_source: str,
+    log_file: Path,
+) -> None:
+    """Print a rich completion banner and structured log summary."""
+    console = Console()
+    console.print()
+    console.print("=" * 80, style="bold green")
+    console.print("BATCH PROCESSING COMPLETED SUCCESSFULLY", style="bold green")
+    console.print("=" * 80, style="bold green")
+    console.print()
+    console.print(f"  Summary: {output_dir}/classification_results/{news_source}_classification_{timestamp}.json")
+    console.print(f"  Errors:  {output_dir}/classification_results/{news_source}_classification_{timestamp}_errors.jsonl")
+    console.print(f"  Logs:    {log_file}")
+    console.print()
+
+    logger.info("=" * 80)
+    logger.info("BATCH PROCESSING COMPLETED")
+    logger.info(f"Processed: {stats.processed}")
+    logger.info(f"Stored: {stats.stored}")
+    logger.info(
+        f"Errors: {stats.extraction_errors + stats.classification_errors + stats.storage_errors + stats.other_errors}"
+    )
+    logger.info("=" * 80)
+
+
+async def apply_skip_existing_filter(
+    articles: list[DiscoveredArticle],
+    article_repo: ArticleRepository,
+    stats: BatchStatistics,
+) -> list[DiscoveredArticle]:
+    """Pre-filter articles against the database, removing already-stored URLs.
+
+    Args:
+        articles: Candidate articles to process.
+        article_repo: Repository used to query existing URLs.
+        stats: BatchStatistics to update with skipped count.
+
+    Returns:
+        Filtered article list with already-stored URLs removed.
+    """
+    logger.info("Filtering existing URLs...")
+    async with db_config.connection() as conn:
+        articles, existing_urls = await filter_existing_urls(conn, articles, article_repo)
+    stats.skipped_existing = len(existing_urls)
+    stats.total = len(articles)
+    return articles
 
 
 def create_statistics_table(stats: BatchStatistics) -> Table:
@@ -467,6 +523,7 @@ def generate_final_report(
     stats: BatchStatistics,
     output_dir: Path,
     timestamp: str,
+    news_source: str,
     input_file: str,
     concurrency: int,
     min_confidence: float,
@@ -556,10 +613,10 @@ def generate_final_report(
     }
 
     # Write to file
-    results_dir = output_dir / "batch_results"
+    results_dir = output_dir / "classification_results"
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    report_file = results_dir / f"batch_{timestamp}.json"
+    report_file = results_dir / f"{news_source}_classification_{timestamp}.json"
     with open(report_file, "w") as f:
         json.dump(report, f, indent=2, ensure_ascii=False)
 
@@ -571,6 +628,7 @@ def generate_error_report(
     results: list[OrchestrationResult],
     output_dir: Path,
     timestamp: str,
+    news_source: str,
 ) -> None:
     """
     Generate JSONL file with all failed articles for debugging.
@@ -586,10 +644,10 @@ def generate_error_report(
         logger.info("No errors to report")
         return
 
-    results_dir = output_dir / "batch_results"
+    results_dir = output_dir / "classification_results"
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    error_file = results_dir / f"batch_{timestamp}_errors.jsonl"
+    error_file = results_dir / f"{news_source}_classification_{timestamp}_errors.jsonl"
     with open(error_file, "w") as f:
         for result in error_results:
             error_record = {
@@ -608,27 +666,72 @@ def generate_error_report(
     logger.info(f"Error report written: {error_file} ({len(error_results)} errors)")
 
 
+def maybe_upload_to_s3(
+    log_file: Path,
+    result_file: Path,
+    news_source: str,
+    timestamp: str,
+) -> None:
+    """Upload the classification log and result JSON to S3 if S3_BUCKET is configured."""
+    bucket = os.environ.get("S3_BUCKET")
+    if not bucket:
+        return
+
+    s3 = get_s3_client()
+    try:
+        upload_log_to_s3(
+            s3,
+            log_file,
+            bucket,
+            news_source=news_source,
+            timestamp=timestamp,
+            log_type="classification",
+        )
+    except Exception as e:
+        print(f"Warning: failed to upload log to S3: {e}", file=sys.stderr)
+
+    try:
+        upload_classification_result_to_s3(
+            s3,
+            result_file,
+            bucket,
+            news_source=news_source,
+            timestamp=timestamp,
+        )
+    except Exception as e:
+        print(f"Warning: failed to upload result to S3: {e}", file=sys.stderr)
+
+
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Process discovered articles through orchestration pipeline",
+        description="Classify discovered articles through orchestration pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Test with 20 articles
-  uv run python scripts/production/process_articles_batch.py --input test_batch.jsonl
+  uv run python scripts/production/classification/classify_articles_batch.py \\
+      --news-source gleaner --input test_batch.jsonl
 
   # Production run with skip-existing
-  uv run python scripts/production/process_articles_batch.py \\
-      --input scripts/production/output/gleaner_archive_2021_11-11.jsonl \\
+  uv run python scripts/production/classification/classify_articles_batch.py \\
+      --news-source gleaner \\
+      --input scripts/production/discovery/output/gleaner_daily_discovery_2026-04-08_16-52-17.jsonl \\
       --concurrency 4 \\
       --skip-existing
 
   # Dry-run to test classification
-  uv run python scripts/production/process_articles_batch.py \\
-      --input test_batch.jsonl \\
-      --dry-run
+  uv run python scripts/production/classification/classify_articles_batch.py \\
+      --news-source gleaner --input test_batch.jsonl --dry-run
         """,
+    )
+
+    parser.add_argument(
+        "--news-source",
+        type=str,
+        required=True,
+        choices=["gleaner", "observer"],
+        help="News source being classified (e.g. gleaner, observer)",
     )
 
     parser.add_argument(
@@ -700,12 +803,12 @@ async def main() -> int:
     args = parse_args()
 
     # Generate timestamp for output files
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
 
     # Configure logging
     logs_dir = args.output_dir / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
-    log_file = logs_dir / f"batch_processing_{timestamp}.log"
+    log_file = logs_dir / f"{args.news_source}_classification_{timestamp}.log"
 
     configure_logging(
         enable_file_logging=True,
@@ -724,6 +827,7 @@ async def main() -> int:
     logger.info(f"Log file: {log_file}")
     logger.info("=" * 80)
 
+    exit_code = 0
     try:
         # Load JSONL articles
         logger.info("Loading articles from JSONL...")
@@ -741,32 +845,20 @@ async def main() -> int:
         stats = BatchStatistics()
         stats.total = len(articles)
 
-        try:
-            # Initialize repositories and services
-            article_repo = ArticleRepository()
+        article_repo = ArticleRepository()
+        if args.skip_existing:
+            articles = await apply_skip_existing_filter(articles, article_repo, stats)
 
-            # Use orchestration service as context manager for HTTP connection pooling
-            async with PipelineOrchestrationService() as service:
-                # Optional: Pre-query existing URLs (--skip-existing)
-                if args.skip_existing:
-                    logger.info("Filtering existing URLs...")
-                    # Use context manager to close db connections. We reuse connection from the pool
-                    async with db_config.connection() as conn:
-                        articles, existing_urls = await filter_existing_urls(
-                            conn, articles, article_repo
-                        )
-                        stats.skipped_existing = len(existing_urls)
-                        stats.total = len(articles)
-
-                if len(articles) == 0:
-                    logger.warning("No articles to process (all skipped or empty input)")
-                    return 0
-
+        # Use orchestration service as context manager for HTTP connection pooling
+        async with PipelineOrchestrationService() as service:
+            if len(articles) == 0:
+                logger.warning("No articles to process (all skipped or empty input)")
+            else:
                 # Run concurrent processing with progress display
                 logger.info(
                     f"Processing {len(articles)} articles with {args.concurrency} workers..."
                 )
-                results = await process_articles_concurrent(
+                results: list[OrchestrationResult] = await process_articles_concurrent(
                     articles=articles,
                     service=service,
                     stats=stats,
@@ -781,6 +873,7 @@ async def main() -> int:
                     stats=stats,
                     output_dir=args.output_dir,
                     timestamp=timestamp,
+                    news_source=args.news_source,
                     input_file=str(args.input),
                     concurrency=args.concurrency,
                     min_confidence=args.min_confidence,
@@ -792,45 +885,25 @@ async def main() -> int:
                     results=results,
                     output_dir=args.output_dir,
                     timestamp=timestamp,
+                    news_source=args.news_source,
                 )
 
-                # Console output
-                console = Console()
-                console.print()
-                console.print("=" * 80, style="bold green")
-                console.print(
-                    "BATCH PROCESSING COMPLETED SUCCESSFULLY", style="bold green"
-                )
-                console.print("=" * 80, style="bold green")
-                console.print()
-                console.print(
-                    f"  Summary: {args.output_dir}/batch_results/batch_{timestamp}.json"
-                )
-                console.print(
-                    f"  Errors:  {args.output_dir}/batch_results/batch_{timestamp}_errors.jsonl"
-                )
-                console.print(f"  Logs:    {log_file}")
-                console.print()
-
-                logger.info("=" * 80)
-                logger.info("BATCH PROCESSING COMPLETED")
-                logger.info(f"Processed: {stats.processed}")
-                logger.info(f"Stored: {stats.stored}")
-                logger.info(
-                    f"Errors: {stats.extraction_errors + stats.classification_errors + stats.storage_errors + stats.other_errors}"
-                )
-                logger.info("=" * 80)
-
-                return 0
-
-        finally:
-            # Close database pool
-            logger.info("Closing database connection pool...")
-            await db_config.close_pool()
+                print_completion_summary(stats, args.output_dir, timestamp, args.news_source, log_file)
 
     except Exception as e:
         logger.error(f"Fatal error: {e}", exc_info=True)
-        return 1
+        exit_code = 1
+    finally:
+        # Safe to call unconditionally — no-op if pool was never created
+        logger.info("Closing database connection pool...")
+        await db_config.close_pool()
+
+    # Flush logger so the log file is fully written before upload
+    logger.remove()
+    result_file = args.output_dir / "classification_results" / f"{args.news_source}_classification_{timestamp}.json"
+    maybe_upload_to_s3(log_file, result_file, args.news_source, timestamp)
+
+    return exit_code
 
 
 if __name__ == "__main__":
