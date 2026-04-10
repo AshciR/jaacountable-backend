@@ -281,3 +281,36 @@ class TestJamaicaObserverExtractorAuthorCleaning:
         # Then: "by " prefix is not treated as the BY-prefix format (only uppercase "BY " is stripped)
         # The pipe split still cleans up the title
         assert "Jane Doe" in result
+
+
+class TestJamaicaObserverExtractorHtmlEntityDecoding:
+    """HTML entity decoding in extracted titles."""
+
+    async def test_title_with_html_entities_decoded_via_json_ld(self):
+        # Given: JSON-LD headline containing HTML entities (json.loads does not decode these)
+        html = """
+        <html>
+            <head>
+                <script type="application/ld+json">
+                {
+                    "@type": "NewsArticle",
+                    "headline": "MP calls for NWA to address &#8216;ongoing flooding&#8217;"
+                }
+                </script>
+            </head>
+            <body>
+                <div class="body content-single-wrap">
+                    <p>Article content that is long enough to pass validation checks here.</p>
+                    <p>Second paragraph to ensure minimum content length requirements are met.</p>
+                </div>
+            </body>
+        </html>
+        """
+        extractor = JamaicaObserverExtractor()
+        url = "https://www.jamaicaobserver.com/2026/04/09/test/"
+
+        # When: extracting content
+        content = extractor.extract(html, url)
+
+        # Then: HTML entities in the JSON-LD headline are decoded to Unicode
+        assert content.title == "MP calls for NWA to address \u2018ongoing flooding\u2019"

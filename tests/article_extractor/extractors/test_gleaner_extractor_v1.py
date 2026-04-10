@@ -319,3 +319,29 @@ class TestGleanerExtractorV1OptionalFields:
 
         # Then: published_date is None (parsing failed gracefully)
         assert content.published_date is None
+
+
+class TestGleanerExtractorV1HtmlEntityDecoding:
+    """HTML entity decoding in extracted titles."""
+
+    async def test_title_with_html_entities_decoded(self):
+        # Given: HTML h1 title containing HTML entities
+        html = """
+        <html>
+            <body>
+                <h1 class="title">Gov&#8217;t calls for &#8216;urgent&#8217; infrastructure review</h1>
+                <div class="article-content">
+                    <p>Article content that is long enough to pass validation checks here.</p>
+                    <p>Second paragraph to ensure minimum content length requirements are met.</p>
+                </div>
+            </body>
+        </html>
+        """
+        extractor = GleanerExtractorV1()
+        url = "https://jamaica-gleaner.com/article/news/test"
+
+        # When: extracting content
+        content = extractor.extract(html, url)
+
+        # Then: HTML entities in the title are decoded to Unicode
+        assert content.title == "Gov\u2019t calls for \u2018urgent\u2019 infrastructure review"

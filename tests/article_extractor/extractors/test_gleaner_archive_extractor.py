@@ -88,3 +88,37 @@ class TestGleanerArchiveExtractorHappyPath:
         # Date should be extracted from URL
         assert content.published_date is not None
         assert content.published_date == datetime(2021, 11, 7, tzinfo=timezone.utc)
+
+
+class TestGleanerArchiveExtractorHtmlEntityDecoding:
+    """HTML entity decoding in extracted titles."""
+
+    @patch("src.article_extractor.extractors.gleaner_archive_extractor.completion")
+    async def test_title_with_html_entities_from_llm_decoded(self, mock_completion):
+        # Given: LLM returns a headline containing HTML entities (possible when LLM output includes them)
+        mock_completion.side_effect = [
+            # First call: headline extraction returns title with HTML entities
+            Mock(choices=[Mock(message=Mock(content="MP calls for &#8216;urgent&#8217; action on flooding"))]),
+            # Second call: author extraction
+            Mock(choices=[Mock(message=Mock(content="Jane Smith"))]),
+        ]
+        html = """
+        <html>
+            <body>
+                <div class="organicOCRSection">
+                    <div class="textArea">
+                        MP calls for urgent action on flooding. The member of parliament spoke at length about
+                        the ongoing infrastructure challenges facing the constituency and surrounding areas.
+                    </div>
+                </div>
+            </body>
+        </html>
+        """
+        extractor = GleanerArchiveExtractor()
+        url = "https://gleaner.newspaperarchive.com/kingston-gleaner/2021-11-07/page-5/"
+
+        # When: extracting content
+        content = extractor.extract(html, url)
+
+        # Then: HTML entities in the LLM-returned title are decoded to Unicode
+        assert content.title == "MP calls for \u2018urgent\u2019 action on flooding"
