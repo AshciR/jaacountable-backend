@@ -65,7 +65,8 @@ jobs:
 
       - name: Run classification
         run: |
-          PYTHONPATH=. uv run python scripts/production/classification/process_articles_batch.py \
-            --input scripts/production/discovery/output/gleaner_daily_????-??-??_??-??-??.jsonl \
+          PYTHONPATH=. uv run python scripts/production/classification/classify_articles_batch.py \
+            --news-source gleaner \
+            --input scripts/production/discovery/output/gleaner_daily_discovery_????-??-??_??-??-??.jsonl \
             --skip-existing \
             --concurrency 4
