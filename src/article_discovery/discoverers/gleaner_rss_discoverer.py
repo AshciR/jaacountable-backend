@@ -8,6 +8,7 @@ import httpx
 from loguru import logger
 
 from src.article_discovery.models import DiscoveredArticle, RssFeedConfig
+from src.article_discovery.utils import deduplicate_discovered_articles
 
 
 class GleanerRssFeedDiscoverer:
@@ -93,7 +94,7 @@ class GleanerRssFeedDiscoverer:
             return []
 
         # CRITICAL: Deduplicate across ALL feeds (not per-feed)
-        deduplicated_articles = self._deduplicate_articles(all_articles)
+        deduplicated_articles = deduplicate_discovered_articles(all_articles)
 
         duplicates_removed = len(all_articles) - len(deduplicated_articles)
         if duplicates_removed > 0:
@@ -323,26 +324,4 @@ class GleanerRssFeedDiscoverer:
             published_date=published_date,
         )
 
-    def _deduplicate_articles(
-        self, articles: list[DiscoveredArticle]
-    ) -> list[DiscoveredArticle]:
-        """
-        Remove duplicate URLs from article list.
 
-        Keeps the first occurrence of each URL.
-
-        Args:
-            articles: List of discovered articles
-
-        Returns:
-            Deduplicated list (first occurrence kept)
-        """
-        seen_urls = set()
-        unique_articles = []
-
-        for article in articles:
-            if article.url not in seen_urls:
-                seen_urls.add(article.url)
-                unique_articles.append(article)
-
-        return unique_articles

@@ -591,3 +591,36 @@ class TestGleanerExtractorV2JsonLdParsing:
         assert json_ld is not None
         assert json_ld["@type"] == "Article"
         assert json_ld["headline"] == "The Article"
+
+
+class TestGleanerExtractorV2HtmlEntityDecoding:
+    """HTML entity decoding in extracted titles."""
+
+    async def test_title_with_html_entities_decoded_via_json_ld(self):
+        # Given: JSON-LD headline containing HTML entities (json.loads does not decode these)
+        html = """
+        <html>
+            <head>
+                <script type="application/ld+json">
+                {
+                    "@type": "Article",
+                    "headline": "Gleaner&#8217;s report on &#8216;housing crisis&#8217;"
+                }
+                </script>
+            </head>
+            <body>
+                <div class="article--body">
+                    <p>Article content that is long enough to pass validation checks here.</p>
+                    <p>Second paragraph to ensure minimum content length requirements are met.</p>
+                </div>
+            </body>
+        </html>
+        """
+        extractor = GleanerExtractorV2()
+        url = "https://jamaica-gleaner.com/article/news/test"
+
+        # When: extracting content
+        content = extractor.extract(html, url)
+
+        # Then: HTML entities in the JSON-LD headline are decoded to Unicode
+        assert content.title == "Gleaner\u2019s report on \u2018housing crisis\u2019"

@@ -1,4 +1,5 @@
 """Article content models for extraction service."""
+import html
 from datetime import datetime
 from pydantic import BaseModel, field_validator, ConfigDict
 
@@ -25,7 +26,7 @@ class ExtractedArticleContent(BaseModel):
         """Validate that title is not empty."""
         if not v or not v.strip():
             raise ValueError("Title cannot be empty")
-        return v.strip()
+        return html.unescape(v.strip())
 
     @field_validator("full_text")
     @classmethod

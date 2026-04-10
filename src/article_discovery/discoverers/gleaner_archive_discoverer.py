@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 from loguru import logger
 
 from src.article_discovery.models import DiscoveredArticle
+from src.article_discovery.utils import deduplicate_discovered_articles
 
 
 class RedirectError(Exception):
@@ -287,7 +288,7 @@ class GleanerArchiveDiscoverer:
                     continue
 
         # Deduplicate by URL
-        deduplicated = self._deduplicate_articles(all_articles)
+        deduplicated = deduplicate_discovered_articles(all_articles)
 
         logger.info(
             f"Archive discovery complete: {len(deduplicated)} unique articles discovered "
@@ -641,34 +642,4 @@ class GleanerArchiveDiscoverer:
             published_date=published_date,
         )
 
-    def _deduplicate_articles(
-        self, articles: list[DiscoveredArticle]
-    ) -> list[DiscoveredArticle]:
-        """
-        Remove duplicate articles by URL.
 
-        Keeps first occurrence of each unique URL.
-
-        Args:
-            articles: List of articles (may contain duplicates)
-
-        Returns:
-            List of articles with duplicates removed
-        """
-        seen_urls: set[str] = set()
-        deduplicated: list[DiscoveredArticle] = []
-
-        for article in articles:
-            if article.url not in seen_urls:
-                seen_urls.add(article.url)
-                deduplicated.append(article)
-            else:
-                logger.debug(f"Duplicate URL found, skipping: {article.url}")
-
-        if len(articles) != len(deduplicated):
-            logger.info(
-                f"Deduplicated {len(articles)} → {len(deduplicated)} articles "
-                f"({len(articles) - len(deduplicated)} duplicates removed)"
-            )
-
-        return deduplicated
