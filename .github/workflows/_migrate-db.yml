@@ -1,0 +1,48 @@
+name: Migrate Database
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Target environment (staging or production)
+        required: true
+        type: string
+    secrets:
+      database_url:
+        required: true
+
+jobs:
+  migrate-db-schema:
+    name: Migrate DB [${{ inputs.environment }}]
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.database_url }}
+    steps:
+      - name: Validate environment input
+        run: |
+          if [[ "${{ inputs.environment }}" != "staging" && "${{ inputs.environment }}" != "production" ]]; then
+            echo "Invalid environment: '${{ inputs.environment }}'. Must be 'staging' or 'production'."
+            exit 1
+          fi
+
+      - name: Checkout the code
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.9.8"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run migrations
+        run: uv run alembic upgrade head
+
+      - name: Verify migration version
+        run: uv run alembic current

@@ -480,6 +480,46 @@ The current schema includes:
   - `full_text` (TEXT) - Full article content for classification
   - Indexes on `url` and `published_date`
 
+## GitHub Actions Workflows
+
+All workflows live in `.github/workflows/`. Files prefixed with `_` are reusable workflows — they have no trigger of their own and are only called by other workflows (analogous to Python's `_private` convention).
+
+### Workflow inventory
+
+| File | Type | Trigger | Purpose |
+|------|------|---------|---------|
+| `ci-cd.yml` | Top-level | Push / PR to `main` | Run tests, build Docker image, migrate staging DB, deploy to staging Render |
+| `deploy-production.yml` | Top-level | Manual (`workflow_dispatch`) | Migrate production DB (phase 1); future phases will add Docker publish and Render deploy |
+| `contract-tests.yml` | Top-level | Schedule (Mon & Thu) + manual | Validate external service contracts |
+| `discover-gleaner-daily.yml` | Top-level | Schedule (3× daily) + manual | Discover & classify Gleaner articles |
+| `discover-observer-daily.yml` | Top-level | Schedule (3× daily) + manual | Discover & classify Observer articles |
+| `_migrate-db.yml` | Reusable | `workflow_call` only | Run `alembic upgrade head` against a target environment |
+
+### Deploying to production
+
+Trigger the production deployment manually from the GitHub Actions UI:
+
+1. Go to **Actions** → **Deploy to Production**
+2. Click **Run workflow**
+3. Select the branch to run from (use `main` for real deployments)
+4. Click **Run workflow**
+
+This runs `alembic upgrade head` against the production database (`PROD_DATABASE_URL` secret).
+
+### Adding a new reusable workflow
+
+Prefix the filename with `_` (e.g. `_notify-slack.yml`) and set the trigger to `workflow_call` only. Call it from top-level workflows using:
+
+```yaml
+jobs:
+  my-job:
+    uses: ./.github/workflows/_your-workflow.yml
+    with:
+      some_input: value
+    secrets:
+      some_secret: ${{ secrets.YOUR_SECRET }}
+```
+
 ## Project Architecture
 
 ```
@@ -637,7 +677,7 @@ Note: Tests within a single file that use database fixtures run sequentially to 
 
 #### CI/CD
 
-GitHub Actions CI runs **all tests** (including integration tests) using the `CLASSIFIER_AGENTS_CI` secret for the API key. This ensures the classifier works correctly with real LLM calls before merging.
+GitHub Actions CI runs **all tests** (including integration tests) using the `OPENAI_CI` secret for the API key. This ensures the classifier works correctly with real LLM calls before merging. See [GitHub Actions Workflows](#github-actions-workflows) for the full workflow inventory.
 
 ### Database Development Workflow
 
