@@ -117,31 +117,11 @@ jobs:
   migrate-db-schema:
     needs: [docker-publish]
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    env:
-      DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
-    steps:
-      - name: Checkout the code
-        uses: actions/checkout@v5
-
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.9.8"
-
-      - name: Install dependencies
-        run: uv sync
-
-      - name: Run migrations
-        run: uv run alembic upgrade head
-
-      - name: Verify migration version
-        run: uv run alembic current
+    uses: ./.github/workflows/_migrate-db.yml
+    with:
+      environment: staging
+    secrets:
+      database_url: ${{ secrets.STAGING_DATABASE_URL }}
 
   deploy:
     needs: [migrate-db-schema]
@@ -150,5 +130,5 @@ jobs:
     steps:
       - name: Trigger Render deploy
         env:
-          deploy_url: ${{ secrets.RENDER_STAGING_DEPLOY_HOOK_URL }}
+          deploy_url: ${{ secrets.STAGING_RENDER_DEPLOY_HOOK_URL }}
         run: curl "$deploy_url"

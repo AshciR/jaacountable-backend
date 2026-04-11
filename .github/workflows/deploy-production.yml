@@ -1,0 +1,12 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    uses: ./.github/workflows/_migrate-db.yml
+    with:
+      environment: production
+    secrets:
+      database_url: ${{ secrets.PROD_DATABASE_URL }}

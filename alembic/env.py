@@ -75,6 +75,11 @@ async def run_async_migrations() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        # Supabase uses pgbouncer (Supavisor) which in transaction pooling mode
+        # doesn't support prepared statements. Setting cache size to 0 disables
+        # asyncpg's prepared statement cache, avoiding DuplicatePreparedStatementError
+        # when multiple Alembic commands run against the same pooled connection.
+        connect_args={"prepared_statement_cache_size": 0},
     )
 
     async with connectable.connect() as connection:
