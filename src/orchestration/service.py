@@ -8,6 +8,8 @@ import time
 import asyncpg
 from loguru import logger
 
+from config.database import db_config
+
 from src.article_extractor.models import ExtractedArticleContent
 from src.article_extractor.base import ArticleExtractionService
 from src.article_extractor.service import DefaultArticleExtractionService
@@ -119,11 +121,11 @@ class PipelineOrchestrationService:
 
     async def process_article(
         self,
-        conn: asyncpg.Connection,
         url: str,
         section: str,
         news_source_id: int = 1,
         min_confidence: float = 0.7,
+        conn: asyncpg.Connection | None = None,
     ) -> OrchestrationResult:
         """
         Process an article through the full pipeline: Extract → Classify → Store.
@@ -131,29 +133,32 @@ class PipelineOrchestrationService:
         Emits ONE canonical log line at the end with complete telemetry.
 
         Args:
-            conn: Database connection (caller manages lifecycle)
             url: Article URL to process
             section: Article section/category (e.g., "news", "lead-stories")
             news_source_id: Database ID of news source (default: 1 for Jamaica Gleaner)
             min_confidence: Minimum confidence threshold for relevance (default: 0.7)
+            conn: Optional database connection. If None, a connection is acquired
+                  lazily inside _step_store and released immediately after storing.
+                  Pass explicitly to control the transaction lifecycle (e.g. dry-run
+                  rollback or when the caller manages connection scope).
 
         Returns:
             OrchestrationResult with processing outcome and metadata
 
         Example:
             >>> service = PipelineOrchestrationService()
+            >>> # Lazy connection (recommended for batch processing)
+            >>> result = await service.process_article(
+            ...     url="https://jamaica-gleaner.com/article/news/...",
+            ...     section="news",
+            ... )
+            >>> # Explicit connection (for dry-run / caller-managed transactions)
             >>> async with db_config.connection() as conn:
             ...     result = await service.process_article(
             ...         conn=conn,
             ...         url="https://jamaica-gleaner.com/article/news/...",
             ...         section="news",
             ...     )
-            ...     if result.stored:
-            ...         print(f"Article {result.article_id} stored")
-            ...     elif result.error:
-            ...         print(f"Error: {result.error}")
-            ...     else:
-            ...         print("Article not relevant")
         """
         telemetry: dict[str, str | int | float] = {
             "url": url,
@@ -494,7 +499,7 @@ class PipelineOrchestrationService:
     async def _step_store(
         self,
         persistence_service: PostgresArticlePersistenceService,
-        conn: asyncpg.Connection,
+        conn: asyncpg.Connection | None,
         extracted: ExtractedArticleContent,
         url: str,
         section: str,
@@ -506,6 +511,56 @@ class PipelineOrchestrationService:
         pipeline_start: float,
     ) -> OrchestrationResult:
         storage_start = time.perf_counter()
+        if conn is not None:
+            # Caller-managed connection (tests, dry-run, validate scripts)
+            return await self._do_store(
+                persistence_service=persistence_service,
+                conn=conn,
+                extracted=extracted,
+                url=url,
+                section=section,
+                relevant_results=relevant_results,
+                classification_results=classification_results,
+                normalized_entities=normalized_entities,
+                news_source_id=news_source_id,
+                telemetry=telemetry,
+                pipeline_start=pipeline_start,
+                storage_start=storage_start,
+            )
+        else:
+            # Lazy acquisition: connection held only for the duration of the store
+            async with db_config.connection() as acquired_conn:
+                return await self._do_store(
+                    persistence_service=persistence_service,
+                    conn=acquired_conn,
+                    extracted=extracted,
+                    url=url,
+                    section=section,
+                    relevant_results=relevant_results,
+                    classification_results=classification_results,
+                    normalized_entities=normalized_entities,
+                    news_source_id=news_source_id,
+                    telemetry=telemetry,
+                    pipeline_start=pipeline_start,
+                    storage_start=storage_start,
+                )
+
+    async def _do_store(
+        self,
+        persistence_service: PostgresArticlePersistenceService,
+        conn: asyncpg.Connection,
+        extracted: ExtractedArticleContent,
+        url: str,
+        section: str,
+        relevant_results: list[ClassificationResult],
+        classification_results: list[ClassificationResult],
+        normalized_entities: list[NormalizedEntity],
+        news_source_id: int,
+        telemetry: dict,
+        pipeline_start: float,
+        storage_start: float,
+    ) -> OrchestrationResult:
+        """Execute the store against a resolved (non-None) connection."""
         try:
             storage_result = await persistence_service.store_article_with_classifications(
                 conn=conn,

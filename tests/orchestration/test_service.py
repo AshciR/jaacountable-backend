@@ -1,5 +1,6 @@
 """Tests for PipelineOrchestrationService."""
-from unittest.mock import Mock, AsyncMock
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 from src.orchestration.service import PipelineOrchestrationService
 from src.article_extractor.models import ExtractedArticleContent
@@ -245,3 +246,73 @@ class TestProcessArticleEdgeCases:
         assert result.article_id is None
         assert result.classification_count == 0
         assert result.error is None
+
+    async def test_relevant_article_stored_via_lazy_connection(
+        self,
+        sample_extracted_content: ExtractedArticleContent,
+    ):
+        # Given: Mock services that produce a relevant result
+        mock_extraction = Mock(spec=ArticleExtractionService)
+        mock_extraction.extract_article_content = AsyncMock(
+            return_value=sample_extracted_content
+        )
+
+        mock_classification = Mock(spec=ClassificationService)
+        mock_classification.classify = AsyncMock(
+            return_value=[
+                ClassificationResult(
+                    is_relevant=True,
+                    confidence=0.9,
+                    reasoning="Corruption investigation involving government contract",
+                    classifier_type=ClassifierType.CORRUPTION,
+                    model_name="gpt-4o-mini",
+                    key_entities=["OCG"],
+                )
+            ]
+        )
+
+        mock_persistence = Mock(spec=PostgresArticlePersistenceService)
+        mock_persistence.store_article_with_classifications = AsyncMock(
+            return_value=ArticleStorageResult(
+                stored=True,
+                article_id=42,
+                classification_count=1,
+                article=None,
+                classifications=[],
+            )
+        )
+
+        service = PipelineOrchestrationService(
+            extraction_service=mock_extraction,
+            classification_service=mock_classification,
+            persistence_service=mock_persistence,
+        )
+
+        # Patch db_config.connection() so no real pool is needed
+        mock_conn = MagicMock()
+        mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
+        mock_conn.__aexit__ = AsyncMock(return_value=False)
+
+        @asynccontextmanager
+        async def mock_connection():
+            yield mock_conn
+
+        url = "https://jamaica-gleaner.com/article/news/test-lazy"
+        section = "news"
+
+        # When: process_article called WITHOUT conn (triggers lazy acquisition)
+        with patch("src.orchestration.service.db_config.connection", mock_connection):
+            result = await service.process_article(url=url, section=section)
+
+        # Then: Article stored via lazily-acquired connection
+        assert result.extracted is True
+        assert result.classified is True
+        assert result.relevant is True
+        assert result.stored is True
+        assert result.article_id == 42
+        assert result.error is None
+
+        # And: persistence was called with the lazily-acquired connection
+        mock_persistence.store_article_with_classifications.assert_called_once()
+        call_kwargs = mock_persistence.store_article_with_classifications.call_args.kwargs
+        assert call_kwargs["conn"] is mock_conn

@@ -50,3 +50,32 @@ class TestProcessArticleIntegrationHappyPath:
         assert corruption_classification is not None
         assert corruption_classification.is_relevant is True
         assert corruption_classification.confidence >= 0.7
+
+    @pytest.mark.external
+    @pytest.mark.integration
+    async def test_process_relevant_article_lazy_connection_succeeds(
+        self,
+        orchestration_service_with_mock_extractor: PipelineOrchestrationService,
+        global_db_config_pool: None,
+        sample_extracted_content: ExtractedArticleContent,
+    ):
+        # Given: A corruption-related article (sample_extracted_content fixture)
+        # db_connection is declared to ensure the pool is initialised; it is not passed
+        url = "https://jamaica-gleaner.com/article/news/test-corruption-lazy-456"
+        section = "news"
+
+        # When: Processing WITHOUT passing conn (lazy acquisition path)
+        result = await orchestration_service_with_mock_extractor.process_article(
+            url=url,
+            section=section,
+            # conn intentionally omitted
+        )
+
+        # Then: Article classified as relevant and stored via lazy connection
+        assert result.extracted is True
+        assert result.classified is True
+        assert result.relevant is True
+        assert result.stored is True
+        assert result.article_id is not None
+        assert result.classification_count >= 1
+        assert result.error is None
