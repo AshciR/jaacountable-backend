@@ -19,9 +19,9 @@ Usage:
         --start-date 2020-01-01 --end-date 2021-01-01 --verbose
 
 Output:
-    - Success file: {output_dir}/jamaica_observer_{start_date}_to_{end_date}.jsonl
-    - Failures file: {output_dir}/jamaica_observer_{start_date}_to_{end_date}-failures.jsonl
-    - Log file: {output_dir}/jamaica_observer_discovery_{timestamp}.log
+    - Success file: {output_dir}/jamaica_observer_discovery_{start_date}_to_{end_date}_{timestamp}.jsonl
+    - Failures file: {output_dir}/jamaica_observer_discovery_{start_date}_to_{end_date}_{timestamp}-failures.jsonl
+    - Log file: {output_dir}/jamaica_observer_discovery_{start_date}_to_{end_date}_{timestamp}.log
 """
 
 import argparse
@@ -116,7 +116,8 @@ async def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    log_file_path = output_dir / f"jamaica_observer_discovery_{timestamp}.log"
+    date_range_str = f"{args.start_date}_to_{args.end_date}"
+    log_file_path = output_dir / f"jamaica_observer_discovery_{date_range_str}_{timestamp}.log"
 
     configure_logging(
         enable_file_logging=True,
@@ -127,9 +128,8 @@ async def main() -> int:
     logger.info(f"Jamaica Observer discovery logging to: {log_file_path}")
 
     # Generate output filenames
-    date_range_str = f"{args.start_date}_to_{args.end_date}"
-    success_path = output_dir / f"jamaica_observer_{date_range_str}.jsonl"
-    failures_path = output_dir / f"jamaica_observer_{date_range_str}-failures.jsonl"
+    success_path = output_dir / f"jamaica_observer_discovery_{date_range_str}_{timestamp}.jsonl"
+    failures_path = output_dir / f"jamaica_observer_discovery_{date_range_str}_{timestamp}-failures.jsonl"
 
     # Run discovery
     try:

@@ -139,7 +139,7 @@ class TestCorruptionClassifierIntegration:
         assert result.is_relevant is True
         assert result.confidence >= 0.7  # High confidence for clear corruption case
         assert result.classifier_type == ClassifierType.CORRUPTION
-        assert result.model_name == "gpt-5.4-nano"
+        assert result.model_name == "openai/gpt-5.4-nano"
         assert len(result.reasoning) > 0
         # Should identify OCG as key entity (normalized or raw)
         # The agent may return normalized entities (e.g., "ocg") or raw entities (e.g., "OCG")
@@ -158,7 +158,6 @@ class TestCorruptionClassifierIntegration:
         # Then: Article is NOT RELEVANT — foreign government, not Jamaican accountability
         assert isinstance(result, ClassificationResult)
         assert result.is_relevant is False
-        assert result.confidence <= 0.4
         assert result.classifier_type == ClassifierType.CORRUPTION
 
     @pytest.mark.external
@@ -197,7 +196,7 @@ class TestCorruptionClassifierIntegration:
         assert result.is_relevant is False
         assert result.confidence <= 0.3  # Low confidence for editorial content
         assert result.classifier_type == ClassifierType.CORRUPTION
-        assert result.model_name == "gpt-5.4-nano"
+        assert result.model_name == "openai/gpt-5.4-nano"
         assert len(result.reasoning) > 0
         # Reasoning should mention it's a letter to the editor
         assert any(

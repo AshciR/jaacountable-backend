@@ -26,6 +26,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import sys
 import time
 from dataclasses import dataclass, field
@@ -225,8 +226,7 @@ async def filter_existing_urls(
 def print_completion_summary(
     stats: BatchStatistics,
     output_dir: Path,
-    timestamp: str,
-    news_source: str,
+    file_stem: str,
     log_file: Path,
 ) -> None:
     """Print a rich completion banner and structured log summary."""
@@ -236,8 +236,8 @@ def print_completion_summary(
     console.print("BATCH PROCESSING COMPLETED SUCCESSFULLY", style="bold green")
     console.print("=" * 80, style="bold green")
     console.print()
-    console.print(f"  Summary: {output_dir}/classification_results/{news_source}_classification_{timestamp}.json")
-    console.print(f"  Errors:  {output_dir}/classification_results/{news_source}_classification_{timestamp}_errors.jsonl")
+    console.print(f"  Summary: {output_dir}/classification_results/{file_stem}.json")
+    console.print(f"  Errors:  {output_dir}/classification_results/{file_stem}_errors.jsonl")
     console.print(f"  Logs:    {log_file}")
     console.print()
 
@@ -357,16 +357,15 @@ async def process_articles_concurrent(
 
     async def bounded_task(article: DiscoveredArticle):
         async with semaphore:
-            # Acquire connection from pool (blocks if pool is exhausted)
-            async with db_config.connection() as conn:
-                return await process_single_article(
-                    service=service,
-                    conn=conn,
-                    article=article,
-                    stats=stats,
-                    min_confidence=min_confidence,
-                    dry_run=dry_run,
-                )
+            # Connection is acquired lazily inside _step_store.
+            # Semaphore controls pipeline concurrency; pool controls DB concurrency.
+            return await process_single_article(
+                service=service,
+                article=article,
+                stats=stats,
+                min_confidence=min_confidence,
+                dry_run=dry_run,
+            )
 
     # Create progress bar
     with Progress(
@@ -424,7 +423,6 @@ async def process_articles_concurrent(
 
 async def process_single_article(
     service: PipelineOrchestrationService,
-    conn: asyncpg.Connection,
     article: DiscoveredArticle,
     stats: BatchStatistics,
     min_confidence: float,
@@ -435,34 +433,35 @@ async def process_single_article(
 
     Args:
         service: Orchestration service instance
-        conn: Database connection
         article: DiscoveredArticle to process
         stats: Statistics tracker (updated in-place)
         min_confidence: Minimum confidence threshold for relevance
-        dry_run: If True, use transaction rollback (no database changes)
+        dry_run: If True, acquire a connection, wrap in a transaction that is
+                 always rolled back, and pass it explicitly so the rollback
+                 covers the store step.
 
     Returns:
         OrchestrationResult or None on unexpected error
     """
     try:
         if dry_run:
-            # Start transaction and explicitly rollback after processing
-            tx = conn.transaction()
-            await tx.start()
-            try:
-                result = await service.process_article(
-                    conn=conn,
-                    url=article.url,
-                    section=article.section,
-                    news_source_id=article.news_source_id,
-                    min_confidence=min_confidence,
-                )
-            finally:
-                await tx.rollback()  # Always rollback in dry-run mode
+            # Acquire connection here so we can own the transaction rollback
+            async with db_config.connection() as conn:
+                tx = conn.transaction()
+                await tx.start()
+                try:
+                    result = await service.process_article(
+                        conn=conn,
+                        url=article.url,
+                        section=article.section,
+                        news_source_id=article.news_source_id,
+                        min_confidence=min_confidence,
+                    )
+                finally:
+                    await tx.rollback()  # Always rollback in dry-run mode
         else:
-            # Normal processing (auto-commit)
+            # conn=None → lazy acquisition inside _step_store
             result = await service.process_article(
-                conn=conn,
                 url=article.url,
                 section=article.section,
                 news_source_id=article.news_source_id,
@@ -522,8 +521,7 @@ async def process_single_article(
 def generate_final_report(
     stats: BatchStatistics,
     output_dir: Path,
-    timestamp: str,
-    news_source: str,
+    file_stem: str,
     input_file: str,
     concurrency: int,
     min_confidence: float,
@@ -616,7 +614,7 @@ def generate_final_report(
     results_dir = output_dir / "classification_results"
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    report_file = results_dir / f"{news_source}_classification_{timestamp}.json"
+    report_file = results_dir / f"{file_stem}.json"
     with open(report_file, "w") as f:
         json.dump(report, f, indent=2, ensure_ascii=False)
 
@@ -627,8 +625,7 @@ def generate_final_report(
 def generate_error_report(
     results: list[OrchestrationResult],
     output_dir: Path,
-    timestamp: str,
-    news_source: str,
+    file_stem: str,
 ) -> None:
     """
     Generate JSONL file with all failed articles for debugging.
@@ -647,7 +644,7 @@ def generate_error_report(
     results_dir = output_dir / "classification_results"
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    error_file = results_dir / f"{news_source}_classification_{timestamp}_errors.jsonl"
+    error_file = results_dir / f"{file_stem}_errors.jsonl"
     with open(error_file, "w") as f:
         for result in error_results:
             error_record = {
@@ -702,6 +699,27 @@ def maybe_upload_to_s3(
         print(f"Warning: failed to upload result to S3: {e}", file=sys.stderr)
 
 
+def build_classification_stem(input_path: Path, timestamp: str) -> str:
+    """Build the output file stem from the input discovery filename.
+
+    Mirrors the discovery filename pattern:
+        jamaica_observer_discovery_2025-01-01_to_2025-05-31_2026-04-16_12-34-17.jsonl
+    →   jamaica_observer_classification_2025-01-01_to_2025-05-31_2026-04-16_17-28-48
+
+    Falls back to the legacy pattern if the input name doesn't match.
+    """
+    match = re.match(
+        r"(.+?)_discovery_(\d{4}-\d{2}-\d{2}_to_\d{4}-\d{2}-\d{2})_",
+        input_path.stem,
+    )
+    if match:
+        source_prefix = match.group(1)   # e.g. "jamaica_observer"
+        date_range = match.group(2)       # e.g. "2025-01-01_to_2025-05-31"
+        return f"{source_prefix}_classification_{date_range}_{timestamp}"
+    # Fallback: derive source prefix from stem or use raw stem
+    return f"{input_path.stem.split('_')[0]}_classification_{timestamp}"
+
+
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
@@ -745,7 +763,7 @@ Examples:
         "--concurrency",
         type=int,
         default=4,
-        help="Max concurrent article processing (default: 4, range: 1-10)",
+        help="Max concurrent article processing (default: 4, range: 1-20)",
     )
 
     parser.add_argument(
@@ -777,8 +795,8 @@ Examples:
     args = parser.parse_args()
 
     # Validate arguments
-    if args.concurrency < 1 or args.concurrency > 10:
-        parser.error("--concurrency must be between 1 and 10")
+    if args.concurrency < 1 or args.concurrency > 20:
+        parser.error("--concurrency must be between 1 and 20")
 
     if args.min_confidence < 0.0 or args.min_confidence > 1.0:
         parser.error("--min-confidence must be between 0.0 and 1.0")
@@ -804,11 +822,12 @@ async def main() -> int:
 
     # Generate timestamp for output files
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+    file_stem = build_classification_stem(args.input, timestamp)
 
     # Configure logging
     logs_dir = args.output_dir / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
-    log_file = logs_dir / f"{args.news_source}_classification_{timestamp}.log"
+    log_file = logs_dir / f"{file_stem}.log"
 
     configure_logging(
         enable_file_logging=True,
@@ -833,13 +852,12 @@ async def main() -> int:
         logger.info("Loading articles from JSONL...")
         articles = load_jsonl_articles(args.input)
 
-        # Initialize database pool
+        # Initialize database pool.
+        # Pool size is controlled by DB_POOL_MIN_SIZE / DB_POOL_MAX_SIZE env vars
+        # and is now independent of --concurrency: connections are held only
+        # during _step_store (~20ms), not the full pipeline (~3-5s).
         logger.info("Initializing database connection pool...")
-        await db_config.create_pool(
-            min_size=args.concurrency,
-            max_size=args.concurrency * 2,
-            command_timeout=60.0,
-        )
+        await db_config.create_pool(command_timeout=60.0)
 
         # Initialize statistics
         stats = BatchStatistics()
@@ -872,8 +890,7 @@ async def main() -> int:
                 report = generate_final_report(
                     stats=stats,
                     output_dir=args.output_dir,
-                    timestamp=timestamp,
-                    news_source=args.news_source,
+                    file_stem=file_stem,
                     input_file=str(args.input),
                     concurrency=args.concurrency,
                     min_confidence=args.min_confidence,
@@ -884,11 +901,10 @@ async def main() -> int:
                 generate_error_report(
                     results=results,
                     output_dir=args.output_dir,
-                    timestamp=timestamp,
-                    news_source=args.news_source,
+                    file_stem=file_stem,
                 )
 
-                print_completion_summary(stats, args.output_dir, timestamp, args.news_source, log_file)
+                print_completion_summary(stats, args.output_dir, file_stem, log_file)
 
     except Exception as e:
         logger.error(f"Fatal error: {e}", exc_info=True)
@@ -900,7 +916,7 @@ async def main() -> int:
 
     # Flush logger so the log file is fully written before upload
     logger.remove()
-    result_file = args.output_dir / "classification_results" / f"{args.news_source}_classification_{timestamp}.json"
+    result_file = args.output_dir / "classification_results" / f"{file_stem}.json"
     maybe_upload_to_s3(log_file, result_file, args.news_source, timestamp)
 
     return exit_code

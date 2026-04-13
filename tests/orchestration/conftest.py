@@ -1,5 +1,7 @@
 """Pytest fixtures for orchestration tests."""
 import pytest
+import pytest_asyncio
+from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 from unittest.mock import Mock, AsyncMock
 
@@ -26,6 +28,27 @@ def mock_extraction_service(sample_extracted_content: ExtractedArticleContent) -
     service = Mock(spec=ArticleExtractionService)
     service.extract_article_content = AsyncMock(return_value=sample_extracted_content)
     return service
+
+
+@pytest_asyncio.fixture(scope="session")
+async def global_db_config_pool(
+    test_database_url: str, run_migrations: None
+) -> AsyncGenerator[None, None]:
+    """Initialize the module-level db_config singleton for lazy-connection tests.
+
+    PipelineOrchestrationService._step_store uses the global db_config singleton
+    when conn=None (lazy acquisition). The db_pool fixture creates a local
+    DatabaseConfig instance, so the singleton's pool must be initialized separately.
+    """
+    from config.database import db_config as global_db_config
+
+    database_url = test_database_url.replace(
+        "postgresql+psycopg2://", "postgresql+asyncpg://"
+    )
+    global_db_config.database_url = database_url
+    await global_db_config.create_pool(min_size=2, max_size=10)
+    yield
+    await global_db_config.close_pool()
 
 
 @pytest.fixture
