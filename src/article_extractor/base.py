@@ -1,6 +1,12 @@
 """Base protocol for article extraction strategies."""
+import os
 from typing import Protocol
+from dotenv import load_dotenv
 from .models import ExtractedArticleContent
+
+load_dotenv()
+EXTRACTOR_API_KEY = os.getenv("OPENAI_EXTRACTOR_API_KEY")
+EXTRACTOR_MODEL = "openai/gpt-4o-mini"
 
 
 class ArticleExtractor(Protocol):

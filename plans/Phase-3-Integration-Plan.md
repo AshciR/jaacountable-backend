@@ -454,7 +454,7 @@ while attempt < max_attempts:
 DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/jaacountable_db
 
 # Classification (LLM API)
-OPENAI_API_KEY=sk-your-key-here
+OPENAI_CLASSIFICATION_API_KEY=sk-your-key-here
 
 # Orchestrator
 MIN_CONFIDENCE_THRESHOLD=0.7

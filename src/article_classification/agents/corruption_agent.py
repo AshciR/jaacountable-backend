@@ -2,7 +2,7 @@
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
 
-from src.article_classification.base import CLASSIFICATION_MODEL
+from src.article_classification.base import CLASSIFICATION_API_KEY, CLASSIFICATION_MODEL
 from src.article_classification.models import ClassificationResult
 
 instruction = f"""
@@ -104,7 +104,7 @@ Do NOT normalize entity names - return them exactly as written in the article.
 """
 
 corruption_classifier = LlmAgent(
-    model=LiteLlm(model=CLASSIFICATION_MODEL),
+    model=LiteLlm(model=CLASSIFICATION_MODEL, api_key=CLASSIFICATION_API_KEY),
     name="corruption_classifier",
     description="Analyzes articles for corruption, bribery, embezzlement, and government accountability issues",
     instruction=instruction

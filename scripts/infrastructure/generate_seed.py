@@ -4,7 +4,7 @@ Generate seed data for local development database.
 
 Prerequisites:
   - Database running and migrated: ./scripts/infrastructure/init-db.sh
-  - .env file with DATABASE_URL and OPENAI_API_KEY
+  - .env file with DATABASE_URL and OPENAI_CLASSIFICATION_API_KEY
   - Internet access (sitemap crawling)
 
 Usage:
@@ -206,8 +206,8 @@ def main() -> int:
 
     if args.pipeline_only:
         load_dotenv(PROJECT_ROOT / ".env")
-        if not os.environ.get("OPENAI_API_KEY"):
-            print("ERROR: OPENAI_API_KEY required in .env")
+        if not os.environ.get("OPENAI_CLASSIFICATION_API_KEY"):
+            print("ERROR: OPENAI_CLASSIFICATION_API_KEY required in .env")
             return 1
         for label, jsonl in selected_sources:
             if not jsonl.exists():
@@ -221,14 +221,14 @@ def main() -> int:
 
     if args.dry_run:
         load_dotenv(PROJECT_ROOT / ".env")
-        api_key_present = bool(os.environ.get("OPENAI_API_KEY"))
+        api_key_present = bool(os.environ.get("OPENAI_CLASSIFICATION_API_KEY"))
 
         print(f"Dry-run preflight check ({start_date} to {end_date})")
         print(f"  Container '{POSTGRES_CONTAINER}': running")
         print(f"  Gleaner JSONL:  {'FOUND' if gleaner_jsonl.exists() else 'MISSING'} ({gleaner_jsonl.name})")
         print(f"  Observer JSONL: {'FOUND' if observer_jsonl.exists() else 'MISSING'} ({observer_jsonl.name})")
         print(f"  seed.sql:       {'EXISTS (will overwrite)' if seed_sql.exists() else 'not yet generated'}")
-        print(f"  OPENAI_API_KEY: {'set' if api_key_present else 'MISSING'}")
+        print(f"  OPENAI_CLASSIFICATION_API_KEY: {'set' if api_key_present else 'MISSING'}")
 
         all_ok = gleaner_jsonl.exists() and observer_jsonl.exists() and api_key_present
         print()
@@ -240,8 +240,8 @@ def main() -> int:
 
     # Load .env for API key validation
     load_dotenv(PROJECT_ROOT / ".env")
-    if not os.environ.get("OPENAI_API_KEY"):
-        print("ERROR: OPENAI_API_KEY required in .env")
+    if not os.environ.get("OPENAI_CLASSIFICATION_API_KEY"):
+        print("ERROR: OPENAI_CLASSIFICATION_API_KEY required in .env")
         return 1
 
     print(f"Generating seed data: {start_date} to {end_date}")

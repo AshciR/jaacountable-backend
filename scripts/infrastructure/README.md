@@ -104,7 +104,7 @@ Loads `seed.sql` into the running database. The database must already be running
 ---
 
 ### `generate_seed.py`
-Operator script that generates `seed.sql` by running discovery, classification pipeline, and `pg_dump`. Requires `OPENAI_API_KEY` and internet access. Intended to be run by maintainers when seed data needs to be regenerated.
+Operator script that generates `seed.sql` by running discovery, classification pipeline, and `pg_dump`. Requires `OPENAI_CLASSIFICATION_API_KEY` and internet access. Intended to be run by maintainers when seed data needs to be regenerated.
 
 **Flags:**
 

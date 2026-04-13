@@ -332,7 +332,7 @@ uv run python scripts/production/classification/process_articles_batch.py \
 
 - `DATABASE_URL` - PostgreSQL connection string (required)
 - `LOG_JSON` - Enable JSON logging (optional, default: `false`)
-- `OPENAI_API_KEY` - Required for classification (set in `.env`)
+- `OPENAI_CLASSIFICATION_API_KEY` - Required for classification (set in `.env`)
 
 ## Support
 

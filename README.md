@@ -157,7 +157,7 @@ docker-compose down -v
 docker-compose build --no-cache app
 ```
 
-**Environment variables:** `DATABASE_URL` is constructed automatically in `docker-compose.yml` to point to the `postgres` service — do not set it manually in `.env` when running via Docker Compose. All other variables (`OPENAI_API_KEY`, `SENTRY_DSN`, etc.) are read from `.env`.
+**Environment variables:** `DATABASE_URL` is constructed automatically in `docker-compose.yml` to point to the `postgres` service — do not set it manually in `.env` when running via Docker Compose. All other variables (`OPENAI_CLASSIFICATION_API_KEY`, `SENTRY_DSN`, etc.) are read from `.env`.
 
 ## Database Management
 
@@ -337,7 +337,7 @@ postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.co
    DATABASE_URL=postgresql+asyncpg://postgres.bdamnvmeszxszdnrqoqw:[YOUR-PASSWORD]@aws-0-us-west-2.pooler.supabase.com:5432/postgres
 
    # OpenAI API Key (for LiteLLM classification models)
-   OPENAI_API_KEY=sk-your-actual-key-here
+   OPENAI_CLASSIFICATION_API_KEY=sk-your-actual-key-here
 
    # Logging Configuration
    LOG_LEVEL=INFO
@@ -609,7 +609,7 @@ The project uses pytest with testcontainers for isolated database testing. Each 
 
 **Integration Tests:**
 - Make actual LLM API calls to validate end-to-end functionality
-- Require `OPENAI_API_KEY` in `.env` file
+- Require `OPENAI_CLASSIFICATION_API_KEY` in `.env` file
 - Slower execution and incur API costs
 - Marked with `@pytest.mark.integration`
 - Run during CI to ensure classifier works correctly

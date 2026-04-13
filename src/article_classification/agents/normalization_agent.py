@@ -4,7 +4,7 @@ from google.adk.models.lite_llm import LiteLlm
 from google.adk.tools import AgentTool
 from google.genai import types
 
-from src.article_classification.base import NORMALIZATION_MODEL
+from src.article_classification.base import CLASSIFICATION_API_KEY, NORMALIZATION_MODEL
 
 # System instruction for normalization agent
 instruction = f"""
@@ -75,7 +75,7 @@ Return ONLY a valid JSON object matching this exact structure:
 # Note: No input_schema/output_schema to avoid OpenAI API compatibility issues
 # Instead, we rely on the instruction to specify JSON format
 normalization_agent = LlmAgent(
-    model=LiteLlm(model=NORMALIZATION_MODEL),
+    model=LiteLlm(model=NORMALIZATION_MODEL, api_key=CLASSIFICATION_API_KEY),
     name="entity_normalizer",
     description="Normalizes entity names from Jamaican news articles for consistency",
     instruction=instruction,
