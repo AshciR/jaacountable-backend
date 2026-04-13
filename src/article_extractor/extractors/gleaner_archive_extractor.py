@@ -7,18 +7,14 @@ than modern Gleaner articles.
 """
 
 import json
-import os
 from datetime import datetime, timezone
 
 from bs4 import BeautifulSoup
-from dotenv import load_dotenv
 from litellm import completion
 from loguru import logger
 
+from src.article_extractor.base import EXTRACTOR_API_KEY, EXTRACTOR_MODEL
 from src.article_extractor.models import ExtractedArticleContent
-
-load_dotenv()
-EXTRACTOR_API_KEY = os.getenv("OPENAI_EXTRACTOR_API_KEY")
 
 class GleanerArchiveExtractor:
     """
@@ -96,7 +92,7 @@ class GleanerArchiveExtractor:
             logger.debug("Using LLM to extract headline from OCR text")
             response = completion(
                 api_key=EXTRACTOR_API_KEY,
-                model="openai/gpt-4o-mini",
+                model=EXTRACTOR_MODEL,
                 messages=[
                     {
                         "role": "system",
@@ -276,7 +272,8 @@ class GleanerArchiveExtractor:
 
             logger.debug("Using LLM to extract author from OCR text")
             response = completion(
-                model="openai/gpt-4o-mini",
+                api_key=EXTRACTOR_API_KEY,
+                model=EXTRACTOR_MODEL,
                 messages=[
                     {
                         "role": "system",

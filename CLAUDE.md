@@ -375,7 +375,7 @@ The project uses pytest with testcontainers for isolated database testing. Each 
 
 **Integration Tests:**
 - Make actual LLM API calls to validate end-to-end functionality
-- Require `OPENAI_API_KEY` in `.env` file
+- Require `OPENAI_CLASSIFICATION_API_KEY` in `.env` file
 - Slower execution and incur API costs
 - Marked with `@pytest.mark.integration`
 - Run during CI to ensure classifier works correctly

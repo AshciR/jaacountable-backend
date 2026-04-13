@@ -1,4 +1,5 @@
 """Base protocol for article classification strategies."""
+import os
 from typing import Protocol
 from dotenv import load_dotenv
 from .models import ClassificationInput, ClassificationResult, NormalizedEntity
@@ -9,6 +10,7 @@ load_dotenv()
 APP_NAME = "jaccountable_backend"
 CLASSIFICATION_MODEL = "gpt-5-nano"
 NORMALIZATION_MODEL = "gpt-5-nano"
+CLASSIFICATION_API_KEY = os.getenv("OPENAI_CLASSIFICATION_API_KEY")
 
 class ArticleClassifier(Protocol):
     """

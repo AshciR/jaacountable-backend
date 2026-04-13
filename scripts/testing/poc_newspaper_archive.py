@@ -12,7 +12,7 @@ Example:
     uv run python scripts/poc_newspaper_archive.py "https://gleaner.newspaperarchive.com/kingston-gleaner/2020-01-01/"
 
 Requirements:
-    - OPENAI_API_KEY in .env file (required by CorruptionClassifier)
+    - OPENAI_CLASSIFICATION_API_KEY in .env file (required by CorruptionClassifier)
 """
 import asyncio
 import logging
