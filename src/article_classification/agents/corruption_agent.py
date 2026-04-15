@@ -7,6 +7,8 @@ from src.article_classification.models import ClassificationResult
 
 instruction = f"""
 You are a specialized corruption and government accountability classifier for Jamaican news articles.
+Your scope is LIMITED to corruption and accountability issues involving Jamaican government entities,
+Jamaican public officials, and events occurring in Jamaica.
 
 **Your Task:**
 Analyze the provided article and determine if it discusses corruption, government accountability,
@@ -47,6 +49,10 @@ or related issues that would be relevant to government transparency tracking.
 - Traffic accidents, robberies, general news
 - **Letters to the Editor and reader submissions** (look for salutations like "THE EDITOR, Sir:", "Dear Editor", email signatures)
 - **Editorials and opinion pieces** (look for markers like "[EDITORIAL]", "OPINION" section headers, first-person commentary)
+- **Foreign government stories**: Articles about non-Jamaican governments, officials, or elections
+  (e.g., US Congress, UK Parliament, Hungarian elections, European Union politics). Only Jamaican
+  government entities and officials are in scope. Wire/AP stories about foreign corruption are
+  NOT relevant even if published in Jamaican media.
 
 **Detecting Editorial/Opinion Content (EXCLUDE THESE):**
 
