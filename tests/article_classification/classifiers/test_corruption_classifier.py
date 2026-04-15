@@ -104,6 +104,16 @@ class TestCorruptionAdapterPromptBuilding:
         # Then: Prompt shows 'Unknown' for date
         assert "Unknown" in prompt
 
+    async def test_build_prompt_includes_geographic_scope(self, sample_corruption_article: ClassificationInput):
+        # Given: Adapter instance
+        classifier = CorruptionClassifier()
+
+        # When: Building prompt
+        prompt = classifier._build_prompt(sample_corruption_article)
+
+        # Then: Prompt contains Jamaica geographic scope constraint
+        assert "Jamaica" in prompt or "Jamaican" in prompt
+
     async def test_build_prompt_includes_json_instruction(self, sample_corruption_article: ClassificationInput):
         # Given: Adapter instance
         classifier = CorruptionClassifier()

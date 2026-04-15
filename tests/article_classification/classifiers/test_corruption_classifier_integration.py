@@ -42,6 +42,54 @@ def ocg_investigation_article() -> ClassificationInput:
 
 
 @pytest.fixture
+def foreign_government_article() -> ClassificationInput:
+    """AP wire story about a foreign election — should be NOT RELEVANT (smoke test)."""
+    return ClassificationInput(
+        url="https://jamaica-gleaner.com/article/news/20260413/orban-concedes-defeat-european-electoral-earthquake",
+        title="Orbán concedes defeat in European electoral earthquake",
+        section="news",
+        full_text="""
+        BUDAPEST, Hungary (AP): Hungarian voters yesterday ousted long-serving Prime Minister
+        Viktor Orbán after 16 years in power, rejecting the authoritarian policies and global
+        far-right movement that he embodied in favour of a pro-European challenger in a bombshell
+        election result with global repercussions. Election victor Péter Magyar, a former Orbán
+        loyalist who campaigned against corruption and on everyday issues like health care and
+        public transport, has pledged to rebuild Hungary's relationships with the European Union
+        and NATO – ties that frayed under Orbán. European leaders quickly congratulated Magyar.
+        """,
+        published_date=datetime(2026, 4, 13, tzinfo=timezone.utc),
+    )
+
+
+@pytest.fixture
+def caribbean_foreign_government_article() -> ClassificationInput:
+    """Regional Caribbean corruption story — should be NOT RELEVANT (regression guard).
+
+    Deliberately mirrors the structure of Jamaican accountability news — named minister,
+    specific dollar amount, named investigation body, procurement fraud — to test that the
+    geographic scope rule is enforced for nearby Caribbean governments, not just distant ones.
+    """
+    return ClassificationInput(
+        url="https://jamaica-gleaner.com/article/caribbean/20260410/trinidad-minister-faces-probe-over-50m-hospital-contract",
+        title="Trinidad minister faces probe over $50m hospital construction contract",
+        section="caribbean",
+        full_text="""
+        PORT OF SPAIN, Trinidad (CMC): Trinidad and Tobago's Minister of Health, Rudolph
+        Sookdeo, is under investigation by the Integrity Commission after a parliamentary
+        committee raised concerns about the award of a TT$50 million contract for the
+        construction of a new wing at the Port of Spain General Hospital. The contract was
+        awarded to a company linked to a close associate of the minister, bypassing the
+        standard Central Tenders Board procurement process. Opposition MPs have called for
+        Sookdeo's resignation, citing the findings of an internal audit that identified
+        irregularities in the procurement documentation. The Integrity Commission confirmed
+        it has opened a formal inquiry and will examine financial disclosures submitted by
+        the minister over the past three years.
+        """,
+        published_date=datetime(2026, 4, 10, tzinfo=timezone.utc),
+    )
+
+
+@pytest.fixture
 def letter_to_editor_article() -> ClassificationInput:
     """Reader letter mentioning corruption - should be NOT RELEVANT."""
     return ClassificationInput(
@@ -97,6 +145,43 @@ class TestCorruptionClassifierIntegration:
         # The agent may return normalized entities (e.g., "ocg") or raw entities (e.g., "OCG")
         normalized_entities = [entity.lower() for entity in result.key_entities]
         assert any("ocg" in entity or "contractor" in entity for entity in normalized_entities)
+
+    @pytest.mark.external
+    @pytest.mark.integration
+    async def test_excludes_foreign_government_article(
+        self, classifier: CorruptionClassifier, foreign_government_article: ClassificationInput
+    ):
+        # Given: AP wire story about a foreign election published in Jamaica Gleaner
+        # When: Classifying the article
+        result: ClassificationResult = await classifier.classify(foreign_government_article)
+
+        # Then: Article is NOT RELEVANT — foreign government, not Jamaican accountability
+        assert isinstance(result, ClassificationResult)
+        assert result.is_relevant is False
+        assert result.confidence <= 0.4
+        assert result.classifier_type == ClassifierType.CORRUPTION
+
+    @pytest.mark.external
+    @pytest.mark.integration
+    async def test_excludes_caribbean_regional_corruption_article(
+        self,
+        classifier: CorruptionClassifier,
+        caribbean_foreign_government_article: ClassificationInput,
+    ):
+        # Given: Regional Caribbean corruption story that mirrors Jamaican accountability news
+        # (named minister, procurement fraud, investigation body, specific dollar amount) —
+        # but concerns the Trinidad & Tobago government, not Jamaica.
+        # When: Classifying the article
+        result: ClassificationResult = await classifier.classify(
+            caribbean_foreign_government_article
+        )
+
+        # Then: NOT RELEVANT — non-Jamaican government even though article structure matches
+        # the kind of Jamaican stories the classifier should flag
+        assert isinstance(result, ClassificationResult)
+        assert result.is_relevant is False
+        assert result.confidence <= 0.4
+        assert result.classifier_type == ClassifierType.CORRUPTION
 
     @pytest.mark.external
     @pytest.mark.integration
