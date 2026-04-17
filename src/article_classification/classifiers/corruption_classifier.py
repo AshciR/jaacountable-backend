@@ -60,7 +60,7 @@ class CorruptionClassifier:
         )
 
     async def classify(
-        self, article: ClassificationInput
+        self, article: ClassificationInput, max_text_chars: int | None = None
     ) -> ClassificationResult:
         """
         Classify article using corruption classifier agent.
@@ -70,6 +70,8 @@ class CorruptionClassifier:
 
         Args:
             article: Article data with url, title, section, full_text, published_date
+            max_text_chars: If set, truncate full_text to this many characters
+                    before building the LLM prompt. Reduces token usage.
 
         Returns:
             ClassificationResult with is_relevant (true/false), confidence,
@@ -85,7 +87,10 @@ class CorruptionClassifier:
         )
 
         # Build prompt with article data
-        prompt: str = self._build_prompt(article)
+        if max_text_chars is not None:
+            prompt: str = self._build_truncated_prompt(article, max_chars=max_text_chars)
+        else:
+            prompt: str = self._build_prompt(article)
 
         # Classify using the LLM
         response: str = await self._call_agent_async(prompt, self.runner, session.user_id, session.id)
@@ -96,7 +101,20 @@ class CorruptionClassifier:
         return result
 
     def _build_prompt(self, article: ClassificationInput) -> str:
-        """Build prompt with article data for LLM agent."""
+        """Build prompt with full article text."""
+        return self._format_prompt(article, article.full_text)
+
+    def _build_truncated_prompt(self, article: ClassificationInput, max_chars: int = 2000) -> str:
+        """Build prompt with truncated text to reduce token usage.
+
+        Uses the first max_chars characters of the article — the headline
+        and opening paragraphs typically contain enough signal for
+        relevance classification.
+        """
+        return self._format_prompt(article, article.full_text[:max_chars])
+
+    def _format_prompt(self, article: ClassificationInput, text: str) -> str:
+        """Format the classification prompt with the given text."""
         return f"""Analyze this Jamaican news article for corruption and government accountability issues:
 
 **Article Details:**
@@ -106,7 +124,7 @@ class CorruptionClassifier:
 - Published: {article.published_date or 'Unknown'}
 
 **Full Text:**
-{article.full_text}
+{text}
 
 Please analyze this article and return your classification as valid JSON matching the ClassificationResult schema."""
 

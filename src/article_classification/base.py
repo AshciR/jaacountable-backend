@@ -36,7 +36,7 @@ class ArticleClassifier(Protocol):
     """
 
     async def classify(
-        self, article: ClassificationInput
+        self, article: ClassificationInput, max_text_chars: int | None = None
     ) -> ClassificationResult:
         """
         Classify an article for relevance to a specific topic.
@@ -44,6 +44,8 @@ class ArticleClassifier(Protocol):
         Args:
             article: Article data with url, title, section, full_text, and
                     optional published_date.
+            max_text_chars: If set, truncate full_text to this many characters
+                    before building the LLM prompt. Reduces token usage.
 
         Returns:
             ClassificationResult with is_relevant (true/false), confidence,

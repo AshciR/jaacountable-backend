@@ -50,7 +50,7 @@ class ClassificationService:
         self.classifiers = classifiers
 
     async def classify(
-        self, article: ClassificationInput
+        self, article: ClassificationInput, max_text_chars: int | None = None
     ) -> list[ClassificationResult]:
         """
         Classify article using all classifiers in parallel.
@@ -60,6 +60,8 @@ class ClassificationService:
 
         Args:
             article: Article data with url, title, section, full_text, etc.
+            max_text_chars: If set, truncate full_text to this many characters
+                    before building the LLM prompt. Reduces token usage.
 
         Returns:
             List of ClassificationResults from all classifiers. Each result
@@ -74,7 +76,7 @@ class ClassificationService:
 
         # Run all classifiers in parallel
         results = await asyncio.gather(
-            *[classifier.classify(article) for classifier in self.classifiers],
+            *[classifier.classify(article, max_text_chars=max_text_chars) for classifier in self.classifiers],
             return_exceptions=True,
         )
 

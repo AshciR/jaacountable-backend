@@ -126,6 +126,69 @@ class TestCorruptionAdapterPromptBuilding:
         assert "ClassificationResult" in prompt
 
 
+class TestCorruptionAdapterTruncatedPromptBuilding:
+    """Test _build_truncated_prompt() method."""
+
+    async def test_build_truncated_prompt_limits_text_length(self):
+        # Given: Article with long full_text
+        long_text = "A" * 5000
+        article = ClassificationInput(
+            url="https://example.com/test",
+            title="Test",
+            section="news",
+            full_text=long_text,
+        )
+        classifier = CorruptionClassifier()
+
+        # When: Building truncated prompt with default limit
+        prompt = classifier._build_truncated_prompt(article)
+
+        # Then: Full 5000-char text should NOT appear, only first 2000
+        assert long_text not in prompt
+        assert "A" * 2000 in prompt
+        assert "A" * 2001 not in prompt
+
+    async def test_build_truncated_prompt_custom_max_chars(self):
+        # Given: Article with long full_text
+        long_text = "B" * 3000
+        article = ClassificationInput(
+            url="https://example.com/test",
+            title="Test",
+            section="news",
+            full_text=long_text,
+        )
+        classifier = CorruptionClassifier()
+
+        # When: Building truncated prompt with custom limit
+        prompt = classifier._build_truncated_prompt(article, max_chars=500)
+
+        # Then: Only first 500 chars included
+        assert "B" * 500 in prompt
+        assert "B" * 501 not in prompt
+
+    async def test_build_truncated_prompt_includes_all_article_fields(self, sample_corruption_article: ClassificationInput):
+        # Given: Adapter instance
+        classifier = CorruptionClassifier()
+
+        # When: Building truncated prompt
+        prompt = classifier._build_truncated_prompt(sample_corruption_article)
+
+        # Then: Prompt includes title, url, and section
+        assert sample_corruption_article.title in prompt
+        assert sample_corruption_article.url in prompt
+        assert sample_corruption_article.section in prompt
+
+    async def test_build_truncated_prompt_short_text_unchanged(self, sample_corruption_article: ClassificationInput):
+        # Given: Article with text shorter than default limit (2000 chars)
+        classifier = CorruptionClassifier()
+
+        # When: Building truncated prompt
+        prompt = classifier._build_truncated_prompt(sample_corruption_article)
+
+        # Then: Full text appears unchanged (it's under 2000 chars)
+        assert sample_corruption_article.full_text in prompt
+
+
 class TestCorruptionAdapterEventProcessing:
     """Test _call_agent_async() event handling."""
 
