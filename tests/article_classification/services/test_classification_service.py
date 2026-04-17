@@ -15,7 +15,7 @@ from src.article_classification.services.classification_service import Classific
 class MockCorruptionClassifier:
     """Mock corruption classifier for testing parallel execution."""
 
-    async def classify(self, article: ClassificationInput) -> ClassificationResult:
+    async def classify(self, article: ClassificationInput, max_text_chars: int | None = None) -> ClassificationResult:
         """Returns a mock corruption classification result."""
         return ClassificationResult(
             is_relevant=True,
@@ -30,7 +30,7 @@ class MockCorruptionClassifier:
 class MockHurricaneClassifier:
     """Mock hurricane classifier for testing parallel execution."""
 
-    async def classify(self, article: ClassificationInput) -> ClassificationResult:
+    async def classify(self, article: ClassificationInput, max_text_chars: int | None = None) -> ClassificationResult:
         """Returns a mock hurricane classification result."""
         return ClassificationResult(
             is_relevant=True,
@@ -56,7 +56,7 @@ class SlowClassifier:
         self.classifier_type = classifier_type
         self.wait_time = wait_time
 
-    async def classify(self, article: ClassificationInput) -> ClassificationResult:
+    async def classify(self, article: ClassificationInput, max_text_chars: int | None = None) -> ClassificationResult:
         """Simulate slow LLM call with configurable delay."""
         await asyncio.sleep(self.wait_time)
         return ClassificationResult(
@@ -80,7 +80,7 @@ class FailingClassifier:
         """
         self.error_message = error_message
 
-    async def classify(self, article: ClassificationInput) -> ClassificationResult:
+    async def classify(self, article: ClassificationInput, max_text_chars: int | None = None) -> ClassificationResult:
         """Always raises ValueError."""
         raise ValueError(self.error_message)
 
