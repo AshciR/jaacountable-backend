@@ -336,6 +336,7 @@ async def process_articles_concurrent(
     stats: BatchStatistics,
     max_concurrency: int = 4,
     min_confidence: float = 0.7,
+    max_text_chars: int = 4000,
     dry_run: bool = False,
 ) -> list[OrchestrationResult]:
     """
@@ -364,6 +365,7 @@ async def process_articles_concurrent(
                 article=article,
                 stats=stats,
                 min_confidence=min_confidence,
+                max_text_chars=max_text_chars,
                 dry_run=dry_run,
             )
 
@@ -426,6 +428,7 @@ async def process_single_article(
     article: DiscoveredArticle,
     stats: BatchStatistics,
     min_confidence: float,
+    max_text_chars: int = 4000,
     dry_run: bool = False,
 ) -> Optional[OrchestrationResult]:
     """
@@ -456,6 +459,7 @@ async def process_single_article(
                         section=article.section,
                         news_source_id=article.news_source_id,
                         min_confidence=min_confidence,
+                        max_text_chars=max_text_chars,
                     )
                 finally:
                     await tx.rollback()  # Always rollback in dry-run mode
@@ -466,6 +470,7 @@ async def process_single_article(
                 section=article.section,
                 news_source_id=article.news_source_id,
                 min_confidence=min_confidence,
+                max_text_chars=max_text_chars,
             )
 
         # Classify error if any
@@ -786,6 +791,13 @@ Examples:
     )
 
     parser.add_argument(
+        "--max-text-chars",
+        type=int,
+        default=4000,
+        help="Truncate article text to this many characters before classification (default: 4000)",
+    )
+
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=Path("scripts/production/classification/output"),
@@ -840,6 +852,7 @@ async def main() -> int:
     logger.info(f"Input file: {args.input}")
     logger.info(f"Concurrency: {args.concurrency}")
     logger.info(f"Min confidence: {args.min_confidence}")
+    logger.info(f"Max text chars: {args.max_text_chars}")
     logger.info(f"Skip existing: {args.skip_existing}")
     logger.info(f"Dry-run mode: {args.dry_run}")
     logger.info(f"Output directory: {args.output_dir}")
@@ -882,6 +895,7 @@ async def main() -> int:
                     stats=stats,
                     max_concurrency=args.concurrency,
                     min_confidence=args.min_confidence,
+                    max_text_chars=args.max_text_chars,
                     dry_run=args.dry_run,
                 )
 

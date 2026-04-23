@@ -125,6 +125,7 @@ class PipelineOrchestrationService:
         section: str,
         news_source_id: int = 1,
         min_confidence: float = 0.7,
+        max_text_chars: int = 4000,
         conn: asyncpg.Connection | None = None,
     ) -> OrchestrationResult:
         """
@@ -137,6 +138,9 @@ class PipelineOrchestrationService:
             section: Article section/category (e.g., "news", "lead-stories")
             news_source_id: Database ID of news source (default: 1 for Jamaica Gleaner)
             min_confidence: Minimum confidence threshold for relevance (default: 0.7)
+            max_text_chars: Truncate article full_text to this many characters
+                before classification. Reduces token usage to stay within
+                rate limits. (default: 4000)
             conn: Optional database connection. If None, a connection is acquired
                   lazily inside _step_store and released immediately after storing.
                   Pass explicitly to control the transaction lifecycle (e.g. dry-run
@@ -199,6 +203,7 @@ class PipelineOrchestrationService:
                 classification_input=classification_input,
                 url=url,
                 section=section,
+                max_text_chars=max_text_chars,
                 telemetry=telemetry,
                 pipeline_start=pipeline_start,
             )
@@ -348,12 +353,15 @@ class PipelineOrchestrationService:
         classification_input: ClassificationInput,
         url: str,
         section: str,
+        max_text_chars: int,
         telemetry: dict,
         pipeline_start: float,
     ) -> tuple[bool, list[ClassificationResult] | OrchestrationResult]:
         classification_start = time.perf_counter()
         try:
-            classification_results = await classification_service.classify(classification_input)
+            classification_results = await classification_service.classify(
+                classification_input, max_text_chars=max_text_chars
+            )
         except Exception as e:
             telemetry.update({
                 "classification_duration_ms": round((time.perf_counter() - classification_start) * 1000, 2),
