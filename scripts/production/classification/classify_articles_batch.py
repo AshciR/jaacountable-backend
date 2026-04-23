@@ -807,8 +807,8 @@ Examples:
     args = parser.parse_args()
 
     # Validate arguments
-    if args.concurrency < 1 or args.concurrency > 20:
-        parser.error("--concurrency must be between 1 and 20")
+    if args.concurrency < 1 or args.concurrency > 10:
+        parser.error("--concurrency must be between 1 and 10")
 
     if args.min_confidence < 0.0 or args.min_confidence > 1.0:
         parser.error("--min-confidence must be between 0.0 and 1.0")
