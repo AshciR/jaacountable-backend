@@ -5,6 +5,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService, Session, BaseSessionService
 from google.genai import types
 from google.genai.types import Content
+from litellm.exceptions import RateLimitError
 
 from src.article_classification.models import (
     ClassificationInput,
@@ -12,6 +13,7 @@ from src.article_classification.models import (
 )
 from src.article_classification.agents.corruption_agent import corruption_classifier
 from src.article_classification.base import APP_NAME
+from src.article_classification.utils import retry_with_backoff
 
 
 class CorruptionClassifier:
@@ -92,8 +94,12 @@ class CorruptionClassifier:
         else:
             prompt: str = self._build_prompt(article)
 
-        # Classify using the LLM
-        response: str = await self._call_agent_async(prompt, self.runner, session.user_id, session.id)
+        # Classify using the LLM (retry on rate-limit errors with exponential backoff + jitter)
+        response: str = await retry_with_backoff(
+            lambda: self._call_agent_async(prompt, self.runner, session.user_id, session.id),
+            retry_on=(RateLimitError,),
+            label=f"corruption_classify({article.url[:60]})",
+        )
 
         # Parse JSON response to ClassificationResult
         result: ClassificationResult = ClassificationResult.model_validate_json(response)
