@@ -1,4 +1,6 @@
 """Tests for GleanerExtractorV2 (JSON-LD + CSS hybrid strategy)."""
+import base64
+import json
 import pytest
 from datetime import timezone
 
@@ -624,3 +626,114 @@ class TestGleanerExtractorV2HtmlEntityDecoding:
 
         # Then: HTML entities in the JSON-LD headline are decoded to Unicode
         assert content.title == "Gleaner\u2019s report on \u2018housing crisis\u2019"
+
+
+class TestGleanerExtractorV2PremiumArticles:
+    """Tests for premium (paywalled) article extraction via base64-encoded content."""
+
+    async def test_extract_premium_article_full(self, gleaner_html_v2_premium: str):
+        # Given: premium Gleaner article with content in paywalled_jsonld
+        extractor = GleanerExtractorV2()
+        url = "https://jamaica-gleaner.com/article/news/20260426/nswma-hiring-row-sparks-two-year-tension-between-senior-officials"
+
+        # When: extracting content
+        content = extractor.extract(gleaner_html_v2_premium, url)
+
+        # Then: all fields are extracted correctly
+        assert isinstance(content, ExtractedArticleContent)
+        assert content.title == "NSWMA hiring row sparks two-year tension between senior officials"
+        assert content.full_text.startswith("An \u201cirregular\u201d recruitment exercise")
+        assert "National Solid Waste Management Authority" in content.full_text
+        assert content.author == "Kimone Francis - Senior Staff Reporter"
+        assert content.published_date is not None
+        assert content.published_date.year == 2026
+        assert content.published_date.month == 4
+        assert content.published_date.day == 26
+
+    async def test_premium_article_filters_email_paragraphs(self, gleaner_html_v2_premium: str):
+        # Given: premium article with email paragraph in rendered_body
+        extractor = GleanerExtractorV2()
+        url = "https://jamaica-gleaner.com/article/news/test"
+
+        # When: extracting content
+        content = extractor.extract(gleaner_html_v2_premium, url)
+
+        # Then: email paragraph is filtered out
+        assert "kimone.francis@gleanerjm.com" not in content.full_text
+
+    async def test_premium_article_with_malformed_base64_raises_value_error(self):
+        # Given: premium article with invalid base64 in premiumContent
+        html = """
+        <html>
+            <head>
+                <script type="application/ld+json">
+                {"@type": "Article", "headline": "Test Premium"}
+                </script>
+                <script type="application/json" data-drupal-selector="drupal-settings-json">
+                {"gleanerPianoFields":{"premium":"1"},"paywalled_jsonld":{"premiumContent":"!!!not-valid-base64!!!"}}
+                </script>
+            </head>
+            <body><h1 class="article--title">Test Premium</h1></body>
+        </html>
+        """
+        extractor = GleanerExtractorV2()
+        url = "https://jamaica-gleaner.com/article/news/test"
+
+        # When/Then: extraction raises ValueError
+        with pytest.raises(ValueError) as exc_info:
+            extractor.extract(html, url)
+
+        assert "Premium article but could not decode content" in str(exc_info.value)
+
+    async def test_premium_article_with_missing_rendered_body_raises_value_error(self):
+        # Given: premium article with base64 content missing rendered_body key
+        bad_content = base64.b64encode(json.dumps({"nid": "123"}).encode()).decode()
+        html = f"""
+        <html>
+            <head>
+                <script type="application/ld+json">
+                {{"@type": "Article", "headline": "Test Premium"}}
+                </script>
+                <script type="application/json" data-drupal-selector="drupal-settings-json">
+                {{"gleanerPianoFields":{{"premium":"1"}},"paywalled_jsonld":{{"premiumContent":"{bad_content}"}}}}
+                </script>
+            </head>
+            <body><h1 class="article--title">Test Premium</h1></body>
+        </html>
+        """
+        extractor = GleanerExtractorV2()
+        url = "https://jamaica-gleaner.com/article/news/test"
+
+        # When/Then: extraction raises ValueError
+        with pytest.raises(ValueError) as exc_info:
+            extractor.extract(html, url)
+
+        assert "Premium article but could not decode content" in str(exc_info.value)
+
+    async def test_non_premium_article_uses_css_selectors(self):
+        # Given: non-premium article with both CSS body and paywalled_jsonld present
+        html = """
+        <html>
+            <head>
+                <script type="application/ld+json">
+                {"@type": "Article", "headline": "Non Premium Article"}
+                </script>
+                <script type="application/json" data-drupal-selector="drupal-settings-json">
+                {"gleanerPianoFields":{"premium":"0"}}
+                </script>
+            </head>
+            <body>
+                <div class="article--body">
+                    <p>This content comes from the normal CSS selector path, not premium decoding.</p>
+                </div>
+            </body>
+        </html>
+        """
+        extractor = GleanerExtractorV2()
+        url = "https://jamaica-gleaner.com/article/news/test"
+
+        # When: extracting content
+        content = extractor.extract(html, url)
+
+        # Then: content extracted from CSS selectors, not premium path
+        assert content.full_text.startswith("This content comes from the normal CSS selector")
