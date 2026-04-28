@@ -58,7 +58,11 @@ sys.path.insert(0, str(project_root))
 
 from config.database import db_config
 from config.log_config import configure_logging
-from scripts.production.utils import upload_classification_result_to_s3, upload_log_to_s3
+from scripts.production.utils import (
+    upload_classification_errors_to_s3,
+    upload_classification_result_to_s3,
+    upload_log_to_s3,
+)
 from src.article_discovery.models import DiscoveredArticle
 from src.article_persistence.repositories.article_repository import ArticleRepository
 from src.orchestration.models import OrchestrationResult
@@ -671,10 +675,11 @@ def generate_error_report(
 def maybe_upload_to_s3(
     log_file: Path,
     result_file: Path,
+    error_file: Path,
     news_source: str,
     timestamp: str,
 ) -> None:
-    """Upload the classification log and result JSON to S3 if S3_BUCKET is configured."""
+    """Upload the classification log, result JSON, and error report to S3 if S3_BUCKET is configured."""
     bucket = os.environ.get("S3_BUCKET")
     if not bucket:
         return
@@ -702,6 +707,18 @@ def maybe_upload_to_s3(
         )
     except Exception as e:
         print(f"Warning: failed to upload result to S3: {e}", file=sys.stderr)
+
+    if error_file.exists():
+        try:
+            upload_classification_errors_to_s3(
+                s3,
+                error_file,
+                bucket,
+                news_source=news_source,
+                timestamp=timestamp,
+            )
+        except Exception as e:
+            print(f"Warning: failed to upload error report to S3: {e}", file=sys.stderr)
 
 
 def build_classification_stem(input_path: Path, timestamp: str) -> str:
@@ -931,7 +948,8 @@ async def main() -> int:
     # Flush logger so the log file is fully written before upload
     logger.remove()
     result_file = args.output_dir / "classification_results" / f"{file_stem}.json"
-    maybe_upload_to_s3(log_file, result_file, args.news_source, timestamp)
+    error_file = args.output_dir / "classification_results" / f"{file_stem}_errors.jsonl"
+    maybe_upload_to_s3(log_file, result_file, error_file, args.news_source, timestamp)
 
     return exit_code
 

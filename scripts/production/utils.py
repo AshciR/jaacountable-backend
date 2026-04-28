@@ -84,3 +84,29 @@ def upload_classification_result_to_s3(
     """
     key = f"{news_source}/classification_results/{news_source}_classification_{timestamp}.json"
     upload_file(client, local_path, bucket, key, content_type="application/json")
+
+
+def upload_classification_errors_to_s3(
+    client: BaseClient,
+    local_path: Path,
+    bucket: str,
+    news_source: str,
+    timestamp: str,
+) -> None:
+    """Upload a classification error JSONL file to S3.
+
+    The object key follows the convention:
+        {news_source}/classification_results/{news_source}_classification_{timestamp}_errors.jsonl
+
+    Args:
+        client: Boto3 S3 client.
+        local_path: Path to the local JSONL error file to upload.
+        bucket: Target S3 bucket name.
+        news_source: News source identifier (e.g. "gleaner", "observer").
+        timestamp: Timestamp string (e.g. "2026-04-01_12-30-00").
+
+    Raises:
+        botocore.exceptions.BotoCoreError: On upload failure.
+    """
+    key = f"{news_source}/classification_results/{news_source}_classification_{timestamp}_errors.jsonl"
+    upload_file(client, local_path, bucket, key, content_type="application/x-ndjson")
