@@ -1,4 +1,5 @@
 """Article extractor for Jamaica Gleaner news source (V2 - JSON-LD + CSS hybrid)."""
+import base64
 import json
 from datetime import datetime, timezone
 from bs4 import BeautifulSoup
@@ -138,11 +139,77 @@ class GleanerExtractorV2:
         # If no title found from any source, raise error (fail-fast)
         raise ValueError(f"Could not extract title from article: {url}")
 
+    def _is_premium_article(self, soup: BeautifulSoup) -> bool:
+        """
+        Check if the article is a premium (paywalled) article.
+
+        Premium articles have their content base64-encoded in Drupal settings JSON
+        rather than rendered in the DOM, because the Piano.js paywall injects it
+        client-side.
+
+        Args:
+            soup: BeautifulSoup parsed HTML
+
+        Returns:
+            True if the article is marked as premium, False otherwise
+        """
+        drupal_settings = self._extract_drupal_settings(soup)
+        if drupal_settings is None:
+            return False
+        piano_fields = drupal_settings.get("gleanerPianoFields", {})
+        return piano_fields.get("premium") == "1"
+
+    def _extract_drupal_settings(self, soup: BeautifulSoup) -> dict | None:
+        """
+        Extract and parse the Drupal settings JSON from the page.
+
+        Args:
+            soup: BeautifulSoup parsed HTML
+
+        Returns:
+            Parsed Drupal settings dict, or None if not found or malformed
+        """
+        script_tag = soup.find("script", attrs={"data-drupal-selector": "drupal-settings-json"})
+        if not script_tag or not script_tag.string:
+            return None
+        try:
+            return json.loads(script_tag.string)
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+    def _extract_premium_content(self, soup: BeautifulSoup) -> BeautifulSoup | None:
+        """
+        Extract article content from the base64-encoded premium content blob.
+
+        Premium articles store their rendered HTML body as base64-encoded JSON
+        inside the Drupal settings JSON under paywalled_jsonld.premiumContent.
+
+        Args:
+            soup: BeautifulSoup parsed HTML
+
+        Returns:
+            BeautifulSoup fragment of the article body, or None if extraction fails
+        """
+        drupal_settings = self._extract_drupal_settings(soup)
+        if drupal_settings is None:
+            return None
+
+        try:
+            b64_content = drupal_settings["paywalled_jsonld"]["premiumContent"]
+            decoded = json.loads(base64.b64decode(b64_content))
+            rendered_body = decoded["rendered_body"]
+            return BeautifulSoup(rendered_body, "lxml")
+        except (KeyError, json.JSONDecodeError, TypeError, Exception):
+            return None
+
     def _extract_full_text(self, soup: BeautifulSoup, url: str) -> str:
         """
         Extract article body paragraphs with priority fallback chain.
 
-        Priority:
+        For premium articles, content is extracted from the base64-encoded
+        premium content blob in Drupal settings JSON.
+
+        For non-premium articles:
         1. div.article--body (new site structure)
         2. div.article-content (legacy site structure)
         3. div.field-name-body (older legacy structure)
@@ -157,7 +224,14 @@ class GleanerExtractorV2:
         Raises:
             ValueError: If article body cannot be extracted or is too short
         """
-        # Try selectors in priority order
+        # Premium articles: content is base64-encoded in Drupal settings JSON
+        if self._is_premium_article(soup):
+            premium_soup = self._extract_premium_content(soup)
+            if premium_soup is None:
+                raise ValueError(f"Premium article but could not decode content: {url}")
+            return self._extract_paragraphs(premium_soup, url)
+
+        # Non-premium: try CSS selectors in priority order
         content_container = None
 
         # Priority 1: div.article--body (new site)
@@ -174,8 +248,23 @@ class GleanerExtractorV2:
         if not content_container:
             raise ValueError(f"Could not find article content container: {url}")
 
-        # Extract all paragraphs
-        paragraphs = content_container.find_all("p")
+        return self._extract_paragraphs(content_container, url)
+
+    def _extract_paragraphs(self, container: BeautifulSoup, url: str) -> str:
+        """
+        Extract and filter paragraphs from an HTML container.
+
+        Args:
+            container: BeautifulSoup element containing <p> tags
+            url: Article URL for error context
+
+        Returns:
+            Full article text as string
+
+        Raises:
+            ValueError: If no valid paragraphs or text too short
+        """
+        paragraphs = container.find_all("p")
 
         if not paragraphs:
             raise ValueError(f"No paragraphs found in article content: {url}")
