@@ -2,11 +2,178 @@ name: Deploy to Production
 
 on:
   workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump type (semver)'
+        type: choice
+        options: [patch, minor, major]
+        default: patch
 
 jobs:
-  migrate:
+  # ---
+  # Step 1: Find the exact image digest confirmed live in staging.
+  # ---
+  get-staging-image:
+    runs-on: ubuntu-latest
+    outputs:
+      image_digest: ${{ steps.staging.outputs.digest }}
+      image_base: ${{ steps.staging.outputs.base }}
+    steps:
+      - name: Get live staging image from Render API
+        id: staging
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          STAGING_SERVICE_ID: ${{ secrets.STAGING_RENDER_SERVICE_ID }}
+        run: |
+          RESPONSE=$(curl -sf \
+            --header "Authorization: Bearer ${RENDER_API_KEY}" \
+            --header "Accept: application/json" \
+            "https://api.render.com/v1/services/${STAGING_SERVICE_ID}/deploys?limit=20")
+
+          LIVE=$(echo "$RESPONSE" | jq -r '[.[] | select(.deploy.status == "live")] | first')
+          DIGEST=$(echo "$LIVE" | jq -r '.deploy.image.sha')
+          REF=$(echo "$LIVE" | jq -r '.deploy.image.ref')
+          BASE=$(echo "$REF" | cut -d: -f1)
+
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+          echo "base=${BASE}" >> $GITHUB_OUTPUT
+          echo "Promoting staging image: ${BASE}@${DIGEST}"
+
+  # ---
+  # Step 2: Run production database migrations.
+  # ---
+  migrate-db-schema:
+    needs: [get-staging-image]
     uses: ./.github/workflows/_migrate-db.yml
     with:
       environment: production
     secrets:
       database_url: ${{ secrets.PROD_DATABASE_URL }}
+
+  # ---
+  # Step 3: Validate migration (placeholder).
+  # ---
+  validate-migration:
+    needs: [migrate-db-schema]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate migration (TODO)
+        run: |
+          # TODO: replace with DB smoke test or health check
+          echo "Migration validation placeholder"
+
+  # ---
+  # Step 4: Deploy exact staging image to production, then tag and release
+  # only after the deployment is confirmed live.
+  # ---
+  deploy-and-release:
+    needs: [validate-migration, get-staging-image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute next semver
+        id: version
+        run: |
+          LATEST=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          LATEST=${LATEST:-v0.0.0}
+          IFS='.' read -r -a parts <<< "${LATEST:1}"
+          MAJOR=${parts[0]}; MINOR=${parts[1]}; PATCH=${parts[2]}
+          BUMP="${{ inputs.bump }}"
+          case "${BUMP:-patch}" in
+            major) MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR+1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH+1)) ;;
+          esac
+          echo "version=v${MAJOR}.${MINOR}.${PATCH}" >> $GITHUB_OUTPUT
+          echo "Next version: v${MAJOR}.${MINOR}.${PATCH}"
+
+      - name: Pull staging image and extract deployed git SHA
+        id: image-info
+        env:
+          IMAGE_BASE: ${{ needs.get-staging-image.outputs.image_base }}
+          IMAGE_DIGEST: ${{ needs.get-staging-image.outputs.image_digest }}
+        run: |
+          docker pull ${IMAGE_BASE}@${IMAGE_DIGEST}
+          GIT_SHA=$(docker inspect \
+            --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' \
+            ${IMAGE_BASE}@${IMAGE_DIGEST})
+          echo "git_sha=${GIT_SHA}" >> $GITHUB_OUTPUT
+          echo "Deployed commit: ${GIT_SHA}"
+
+      - name: Trigger production deploy via Render API
+        id: trigger
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          PROD_SERVICE_ID: ${{ secrets.PROD_RENDER_SERVICE_ID }}
+          IMAGE_BASE: ${{ needs.get-staging-image.outputs.image_base }}
+          IMAGE_DIGEST: ${{ needs.get-staging-image.outputs.image_digest }}
+        run: |
+          IMAGE_URL="${IMAGE_BASE}@${IMAGE_DIGEST}"
+          echo "Deploying: ${IMAGE_URL}"
+
+          RESPONSE=$(curl -sf \
+            --request POST \
+            --header "Authorization: Bearer ${RENDER_API_KEY}" \
+            --header "Accept: application/json" \
+            --header "Content-Type: application/json" \
+            --data "{\"imageUrl\": \"${IMAGE_URL}\"}" \
+            "https://api.render.com/v1/services/${PROD_SERVICE_ID}/deploys")
+
+          DEPLOY_ID=$(echo "$RESPONSE" | jq -r '.id')
+          echo "deploy_id=${DEPLOY_ID}" >> $GITHUB_OUTPUT
+          echo "Triggered production deploy: ${DEPLOY_ID}"
+
+      - name: Poll for production deploy to go live
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          PROD_SERVICE_ID: ${{ secrets.PROD_RENDER_SERVICE_ID }}
+          DEPLOY_ID: ${{ steps.trigger.outputs.deploy_id }}
+        run: |
+          for i in $(seq 1 30); do
+            STATUS=$(curl -sf \
+              --header "Authorization: Bearer ${RENDER_API_KEY}" \
+              "https://api.render.com/v1/services/${PROD_SERVICE_ID}/deploys?limit=20" \
+              | jq -r --arg id "$DEPLOY_ID" '.[] | select(.deploy.id == $id) | .deploy.status')
+            echo "Attempt ${i}/30: status=${STATUS}"
+            case "$STATUS" in
+              live) echo "Production is live!"; exit 0 ;;
+              build_failed|update_failed|pre_deploy_failed|canceled)
+                echo "Deploy failed: ${STATUS}"; exit 1 ;;
+            esac
+            sleep 30
+          done
+          echo "Timed out waiting for production deploy"; exit 1
+
+      - name: Tag image with release version and production label
+        env:
+          IMAGE_BASE: ${{ needs.get-staging-image.outputs.image_base }}
+          IMAGE_DIGEST: ${{ needs.get-staging-image.outputs.image_digest }}
+          RELEASE_TAG: ${{ steps.version.outputs.version }}
+        run: |
+          docker tag ${IMAGE_BASE}@${IMAGE_DIGEST} ${IMAGE_BASE}:${RELEASE_TAG}
+          docker tag ${IMAGE_BASE}@${IMAGE_DIGEST} ${IMAGE_BASE}:production
+          docker push ${IMAGE_BASE}:${RELEASE_TAG}
+          docker push ${IMAGE_BASE}:production
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          target_commitish: ${{ steps.image-info.outputs.git_sha }}
+          generate_release_notes: true
+          make_latest: true
