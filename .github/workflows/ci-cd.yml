@@ -87,7 +87,8 @@ jobs:
       contents: read
       packages: write
     outputs:
-      short_sha: ${{ steps.meta.outputs.version }}
+      short_sha: ${{ steps.sha-tag.outputs.tag }}
+      lower_repo: ${{ steps.lower-repo.outputs.repo }}
     steps:
       - name: Checkout the code
         uses: actions/checkout@v5
@@ -99,11 +100,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Lowercase repository
+        id: lower-repo
+        run: echo "repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/${{ steps.lower-repo.outputs.repo }}
           tags: |
             type=raw,value=latest
             type=sha,prefix=sha-,format=short
@@ -116,9 +121,15 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
+      - name: Extract short SHA tag
+        id: sha-tag
+        run: |
+          REVISION=$(echo '${{ steps.meta.outputs.json }}' | jq -r '.labels["org.opencontainers.image.revision"]')
+          echo "tag=sha-${REVISION:0:7}" >> $GITHUB_OUTPUT
+
       - name: Log image metadata
         run: |
-          echo "short_sha: ${{ steps.meta.outputs.version }}"
+          echo "short_sha: ${{ steps.sha-tag.outputs.tag }}"
           echo "tags: ${{ steps.meta.outputs.tags }}"
           echo "labels: ${{ steps.meta.outputs.labels }}"
 
@@ -132,7 +143,7 @@ jobs:
       database_url: ${{ secrets.STAGING_DATABASE_URL }}
 
   deploy:
-    needs: [migrate-db-schema]
+    needs: [migrate-db-schema, docker-publish]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -180,7 +191,7 @@ jobs:
 
       - name: Tag image as staging
         env:
-          IMAGE_BASE: ghcr.io/${{ github.repository }}
+          IMAGE_BASE: ghcr.io/${{ needs.docker-publish.outputs.lower_repo }}
           SHA_TAG: ${{ needs.docker-publish.outputs.short_sha }}
         run: |
           docker pull ${IMAGE_BASE}:${SHA_TAG}
