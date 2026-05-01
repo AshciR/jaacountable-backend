@@ -164,14 +164,16 @@ jobs:
           SERVICE_ID: ${{ secrets.STAGING_RENDER_SERVICE_ID }}
           TRIGGERED_AT: ${{ steps.trigger.outputs.triggered_at }}
         run: |
+          TRIGGERED_EPOCH=$(date -d "$TRIGGERED_AT" +%s)
           for i in $(seq 1 30); do
             RESPONSE=$(curl -sf \
               --header "Authorization: Bearer ${RENDER_API_KEY}" \
               "https://api.render.com/v1/services/${SERVICE_ID}/deploys?limit=1")
             STATUS=$(echo "$RESPONSE" | jq -r '.[0].deploy.status')
             CREATED=$(echo "$RESPONSE" | jq -r '.[0].deploy.createdAt')
+            CREATED_EPOCH=$(date -d "$CREATED" +%s)
             echo "Attempt ${i}/30: status=${STATUS} createdAt=${CREATED}"
-            if [[ "$CREATED" > "$TRIGGERED_AT" ]]; then
+            if [ "$CREATED_EPOCH" -ge "$TRIGGERED_EPOCH" ]; then
               case "$STATUS" in
                 live) echo "Staging is live!"; exit 0 ;;
                 build_failed|update_failed|pre_deploy_failed|canceled)
