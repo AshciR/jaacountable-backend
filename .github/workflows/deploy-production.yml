@@ -122,10 +122,11 @@ jobs:
           IMAGE_BASE: ${{ needs.get-staging-image.outputs.image_base }}
           IMAGE_DIGEST: ${{ needs.get-staging-image.outputs.image_digest }}
         run: |
-          IMAGE_URL="${IMAGE_BASE}@${IMAGE_DIGEST}"
+          GIT_SHA="${{ steps.image-info.outputs.git_sha }}"
+          IMAGE_URL="${IMAGE_BASE}:sha-${GIT_SHA:0:7}"
           echo "Deploying: ${IMAGE_URL}"
 
-          RESPONSE=$(curl -sf \
+          HTTP_STATUS=$(curl -s -w "%{http_code}" -o /tmp/render_response.json \
             --request POST \
             --header "Authorization: Bearer ${RENDER_API_KEY}" \
             --header "Accept: application/json" \
@@ -133,7 +134,14 @@ jobs:
             --data "{\"imageUrl\": \"${IMAGE_URL}\"}" \
             "https://api.render.com/v1/services/${PROD_SERVICE_ID}/deploys")
 
-          DEPLOY_ID=$(echo "$RESPONSE" | jq -r '.id')
+          echo "HTTP status: ${HTTP_STATUS}"
+          echo "Response: $(cat /tmp/render_response.json)"
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "Render API call failed with HTTP ${HTTP_STATUS}"; exit 1
+          fi
+
+          DEPLOY_ID=$(jq -r '.id' /tmp/render_response.json)
           echo "deploy_id=${DEPLOY_ID}" >> $GITHUB_OUTPUT
           echo "Triggered production deploy: ${DEPLOY_ID}"
 
