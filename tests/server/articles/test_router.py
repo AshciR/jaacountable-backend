@@ -149,6 +149,101 @@ class TestSearchAnalyticsEventFired:
         assert call_kwargs["distinct_id"] == "frontend-posthog-id"
         assert call_kwargs["is_internal"] is True
 
+    async def test_query_submit_not_fired_when_page_greater_than_one(
+        self, client: TestClient, mock_analytics: MagicMock
+    ):
+        # Given: service returns results for a page-2 request
+        with patch.object(
+            ArticleSearchService, "search", new_callable=AsyncMock
+        ) as mock_search:
+            mock_search.return_value = ([], 10)
+
+            # When: client fetches page 2
+            client.get("/api/v1/articles", params={"page": 2})
+
+        # Then: search:query_submit was NOT fired
+        call_kwargs = mock_analytics.capture_with_common_props.call_args.kwargs
+        assert call_kwargs["event"] != "search:query_submit"
+
+
+# ---------------------------------------------------------------------------
+# TestLoadMoreAnalyticsEventFired
+# ---------------------------------------------------------------------------
+
+
+class TestLoadMoreAnalyticsEventFired:
+    """search:load_more_click is captured when page > 1."""
+
+    async def test_event_fired_with_correct_properties_on_page_two(
+        self, client: TestClient, mock_analytics: MagicMock
+    ):
+        # Given: service returns results for a page-2 search
+        with patch.object(
+            ArticleSearchService, "search", new_callable=AsyncMock
+        ) as mock_search:
+            mock_search.return_value = ([], 20)
+
+            # When: client fetches page 2 with a query
+            client.get(
+                "/api/v1/articles", params={"q": "corruption", "page": 2, "page_size": 5}
+            )
+
+        # Then: search:load_more_click is captured with correct properties
+        mock_analytics.capture_with_common_props.assert_called_once()
+        call_kwargs = mock_analytics.capture_with_common_props.call_args.kwargs
+        assert call_kwargs["event"] == "search:load_more_click"
+        assert call_kwargs["properties"]["search_query"] == "corruption"
+        assert call_kwargs["properties"]["page"] == 2
+        assert call_kwargs["properties"]["current_results_count"] == 5  # (2-1) * 5
+
+    async def test_search_query_is_empty_string_in_browse_mode(
+        self, client: TestClient, mock_analytics: MagicMock
+    ):
+        # Given: service returns results for a browse (no-query) load-more request
+        with patch.object(
+            ArticleSearchService, "search", new_callable=AsyncMock
+        ) as mock_search:
+            mock_search.return_value = ([], 50)
+
+            # When: client fetches page 2 with no q param
+            client.get("/api/v1/articles", params={"page": 2})
+
+        # Then: search_query is "" (not None) to match frontend spec
+        call_kwargs = mock_analytics.capture_with_common_props.call_args.kwargs
+        assert call_kwargs["properties"]["search_query"] == ""
+
+    async def test_current_results_count_is_previous_pages_times_page_size(
+        self, client: TestClient, mock_analytics: MagicMock
+    ):
+        # Given: service returns results for page 3 with page_size=5
+        with patch.object(
+            ArticleSearchService, "search", new_callable=AsyncMock
+        ) as mock_search:
+            mock_search.return_value = ([], 30)
+
+            # When: client fetches page 3
+            client.get("/api/v1/articles", params={"page": 3, "page_size": 5})
+
+        # Then: current_results_count = (3-1) * 5 = 10
+        call_kwargs = mock_analytics.capture_with_common_props.call_args.kwargs
+        assert call_kwargs["properties"]["current_results_count"] == 10
+
+    async def test_query_submit_not_fired_on_load_more(
+        self, client: TestClient, mock_analytics: MagicMock
+    ):
+        # Given: service returns results for a page-2 request
+        with patch.object(
+            ArticleSearchService, "search", new_callable=AsyncMock
+        ) as mock_search:
+            mock_search.return_value = ([], 10)
+
+            # When: client fetches page 2
+            client.get("/api/v1/articles", params={"page": 2})
+
+        # Then: search:query_submit was NOT fired
+        call_kwargs = mock_analytics.capture_with_common_props.call_args.kwargs
+        assert call_kwargs["event"] != "search:query_submit"
+
 
 # ---------------------------------------------------------------------------
 # TestSearchAnalyticsInternalFlag
