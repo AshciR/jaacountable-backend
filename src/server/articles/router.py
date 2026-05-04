@@ -31,12 +31,7 @@ async def search_articles(
 ) -> ArticleSearchResponse:
     results, total = await service.search(conn, params)
 
-    analytics.capture_with_common_props(
-        distinct_id=analytics.get_distinct_id(request),
-        event="search:query_submit",
-        properties={"search_query": params.q, "results_count": total},
-        is_internal=analytics.is_internal_request(request),
-    )
+    _capture_search_event(analytics, request, params, total)
 
     return ArticleSearchResponse.build(
         items=[ArticleSearchResultSchema.model_validate(r) for r in results],
@@ -44,3 +39,33 @@ async def search_articles(
         page=params.page,
         page_size=params.page_size,
     )
+
+
+def _capture_search_event(
+    analytics: AnalyticsClient,
+    request: Request,
+    params: ArticleSearchParams,
+    total: int,
+) -> None:
+    distinct_id = analytics.get_distinct_id(request)
+    is_internal = analytics.is_internal_request(request)
+    # page == 1 means a fresh search or browse; page > 1 means the user clicked
+    # Load More — the frontend reuses the same endpoint for both actions.
+    if params.page == 1:
+        analytics.capture_with_common_props(
+            distinct_id=distinct_id,
+            event="search:query_submit",
+            properties={"search_query": params.q, "results_count": total},
+            is_internal=is_internal,
+        )
+    else:
+        analytics.capture_with_common_props(
+            distinct_id=distinct_id,
+            event="search:load_more_click",
+            properties={
+                "search_query": params.q or "",
+                "page": params.page,
+                "current_results_count": (params.page - 1) * params.page_size,
+            },
+            is_internal=is_internal,
+        )
